@@ -1,0 +1,145 @@
+// Thin wrappers over the Go backend at /api/*.
+// During dev, Vite proxies /api to localhost:8080 (see vite.config.ts).
+// In production, the same Go binary serves both the SPA and the API.
+
+export type Torrent = {
+  id: number;
+  title: string;
+  forum_id: number;
+  forum_name: string;
+  size_bytes: number;
+  registered_at: string; // ISO 8601
+  hash: string;
+  // Live peer cache, joined on list reads. Absent when a torrent has never
+  // been checked (the badge shows "—"); peers_checked_at lets the list grey
+  // out values older than the refresh window.
+  seeders?: number;
+  leechers?: number;
+  peers_checked_at?: string; // ISO 8601
+};
+
+export type TorrentDetail = Torrent & {
+  content_html: string;
+  // Size of the dump's file listing, so the drawer can label its collapsed
+  // Files section without fetching the tree. Absent when the dump had none.
+  files_count?: number;
+};
+
+export type SearchResponse = {
+  items: Torrent[];
+  total: number;
+};
+
+export type Stats = {
+  torrents_total: number;
+  total_size_bytes: number;
+  forums_count: number;
+  // How many torrents have a cached seeders/leechers snapshot. Grows as
+  // browsing populates the peer cache; recomputed fresh server-side.
+  peers_cached: number;
+  // Server-side feature gate (RT_PEERS_ENABLED); off → the UI hides the
+  // seeders/leechers layer entirely instead of showing frozen cache.
+  peers_enabled: boolean;
+  // ISO 8601 finish time of the last successful dump ingest. Absent until a
+  // first sweep completes — the stats ribbon then drops its "@ date" stamp.
+  dump_updated_at?: string;
+};
+
+export type Forum = {
+  id: number;
+  name: string;
+  count: number;
+};
+
+export type SearchParams = {
+  q?: string;
+  forum_id?: number;
+  sort?: "relevance" | "date" | "size";
+  dir?: "asc" | "desc";
+  offset?: number;
+  limit?: number;
+};
+
+async function get<T>(path: string): Promise<T> {
+  const r = await fetch(path);
+  if (!r.ok) {
+    let msg = `HTTP ${r.status}`;
+    try {
+      const body = await r.json();
+      if (body?.error) msg = `${msg}: ${body.error}`;
+    } catch {
+      // body wasn't JSON
+    }
+    throw new Error(msg);
+  }
+  return r.json() as Promise<T>;
+}
+
+export function getStats() {
+  return get<Stats>("/api/stats");
+}
+
+export function getForums() {
+  return get<{ items: Forum[] }>("/api/forums");
+}
+
+export function getTorrent(id: number) {
+  return get<TorrentDetail>(`/api/torrents/${id}`);
+}
+
+// File listing carried by the dump. Entries are [path, size] tuples — the
+// server stores them in exactly this shape, so the response is the stored
+// bytes decompressed. files_count is the real total: when `truncated`, only
+// the first 1000 entries are present. A 404 means the dump had no listing.
+export type TorrentFiles = {
+  files_count: number;
+  truncated: boolean;
+  files: [string, number][];
+};
+
+export async function getTorrentFiles(id: number): Promise<TorrentFiles | null> {
+  const r = await fetch(`/api/torrents/${id}/files`);
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json() as Promise<TorrentFiles>;
+}
+
+// Transmission feature state: configured (endpoint set → render the button)
+// and online (live probe → active vs greyed-out). Both false when off.
+export type TransmissionStatus = { configured: boolean; online: boolean };
+
+export function getTransmissionStatus() {
+  return get<TransmissionStatus>("/api/transmission/status");
+}
+
+// Push a torrent's magnet into Transmission. "added" = queued now, "duplicate"
+// = the daemon already had it. Throws on a transport/RPC failure so the button
+// can show an error state.
+export type DownloadResult = { status: "added" | "duplicate"; name?: string };
+
+export async function sendToTransmission(id: number): Promise<DownloadResult> {
+  const r = await fetch(`/api/torrents/${id}/download`, { method: "POST" });
+  if (!r.ok) {
+    let msg = `HTTP ${r.status}`;
+    try {
+      const body = await r.json();
+      if (body?.error) msg = `${msg}: ${body.error}`;
+    } catch {
+      // body wasn't JSON
+    }
+    throw new Error(msg);
+  }
+  return r.json() as Promise<DownloadResult>;
+}
+
+export function searchTorrents(p: SearchParams) {
+  const qs = new URLSearchParams();
+  if (p.q) qs.set("q", p.q);
+  if (p.forum_id) qs.set("forum_id", String(p.forum_id));
+  if (p.sort) qs.set("sort", p.sort);
+  if (p.dir) qs.set("dir", p.dir);
+  if (p.offset !== undefined) qs.set("offset", String(p.offset));
+  if (p.limit !== undefined) qs.set("limit", String(p.limit));
+  const url = qs.toString() ? `/api/search?${qs}` : "/api/search";
+  return get<SearchResponse>(url);
+}

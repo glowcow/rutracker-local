@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<torrents>
+<torrent id="100" registred_at="2020.01.01 10:00:00" unixts="1577872800" size="1024">
+ <title>  Test Album One  </title>
+ <torrent hash="AAAA1234567890ABCDEFABCDEFABCDEFABCDEF00" tracker_id="3"/>
+ <forum id="42">Music — Rock</forum>
+ <content>Some BBCode [b]bold[/b] [img]https://dead.example/cover.jpg[/img]</content>
+ <dir name="Test Album One">
+  <dir name="Artwork">
+   <file size="4096" name="Front.jpg"/>
+  </dir>
+  <file size="1024" name="01 — Track &amp; &quot;One&quot;.flac"/>
+ </dir>
+</torrent>
+<torrent id="101" registred_at="2021.05.15 14:30:00" unixts="1621089000" size="2147483648">
+ <title>Test Film Two</title>
+ <torrent hash="BBBB1234567890ABCDEFABCDEFABCDEFABCDEF11" tracker_id="3"/>
+ <forum id="99">Films — Drama</forum>
+ <content>Film description here.</content>
+ <file size="2147483648" name="Test Film Two.mkv"/>
+</torrent>
+<torrent id="102" registred_at="2022.11.20 23:59:59" unixts="1669003199" size="0">
+ <title>Edge case: empty content + zero size</title>
+ <torrent hash="CCCC1234567890ABCDEFABCDEFABCDEFABCDEF22" tracker_id="3"/>
+ <forum id="42">Music — Rock</forum>
+ <content></content>
+</torrent>
+</torrents>

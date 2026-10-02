@@ -1,0 +1,257 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Swiss revival palette. Light tones are warm bone/paper + warm charcoal —
+     not pure white/black — to give the editorial feel without harsh contrast.
+     Dark mirrors the relationship: warm charcoal ground, paper-tone text. */
+  --color-paper:        #ECEAE3; /* warm off-white, body bg                  */
+  --color-paper-soft:   #DCDAD2; /* zebra fill on light — bumped for visible
+                                    row contrast (was #E3E1DA, too close)    */
+  --color-ink:          #141414; /* near-black text — warm charcoal          */
+  --color-ink-soft:     #4A4A48; /* secondary text                           */
+  --color-ink-muted:    #87867F; /* tertiary text, meta                      */
+  --color-rule:         #C4C2BB; /* hairline rules                           */
+
+  --color-dark-paper:        #141414;
+  /* Dark zebra needs a bigger delta — small offsets vanish on charcoal.
+     ~+15 in each channel gives a clearly readable alternating row. */
+  --color-dark-paper-soft:   #242422;
+  --color-dark-ink:          #ECEAE3;
+  --color-dark-ink-soft:     #B0AEA6;
+  --color-dark-ink-muted:    #7C7B75;
+  /* Rule colour on dark theme: previous #2E2E2C was barely above the
+     charcoal bg, hairlines and the slash separators in the meta/stats rows
+     visually disappeared. Lifted to a noticeable mid-grey that still reads
+     as "subtle structural element" not "border with weight". */
+  --color-dark-rule:         #5A5A55;
+
+  /* Brand accent — warm yellow. One accent only; the old blue/red stops
+     belong to the gradient wash we're removing for Swiss clarity. White
+     text on yellow fails WCAG; solid-accent surfaces use ink for text.
+     Light theme uses a darker amber — the bright #F0D050 vanishes against
+     the bone paper bg; .dark override below restores the full-bright tone
+     where it reads cleanly against charcoal. */
+  --color-accent:       #C99514;
+  --color-accent-hover: #AC7F0E;
+}
+
+@layer base {
+  /* Header height. Two rows on mobile (brand+controls, then a full-width
+     search), one row from sm up. Sticky offsets under it key off this. */
+  :root {
+    --header-h: 6.25rem;
+  }
+  @media (min-width: 40rem) {
+    :root {
+      --header-h: 4rem;
+    }
+  }
+
+  html, body, #root {
+    min-height: 100svh;
+  }
+
+  /* Reserve the scrollbar gutter even when the page isn't scrollable. Without
+     this, opening DetailDrawer (which sets body.overflow=hidden to lock the
+     background) shifts every element ~8 px right in Chrome because the
+     vertical scrollbar disappears and the freed width is reflowed. */
+  html {
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01", "ss03";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    /* Swiss tracking — neutral by default; large display sizes will
+       tighten via component classes. */
+    letter-spacing: 0;
+
+    color: var(--color-ink);
+    background-color: var(--color-paper);
+    /* Prevent rubber-band scroll background flashing on iOS */
+    overscroll-behavior-y: none;
+  }
+
+  .dark body {
+    color: var(--color-dark-ink);
+    background-color: var(--color-dark-paper);
+  }
+
+  /* Restore the bright warm yellow on dark mode — it reads beautifully on
+     charcoal but evaporates on bone paper, so light uses a darker amber. */
+  .dark {
+    --color-accent:       #F0D050;
+    --color-accent-hover: #D9BC3B;
+  }
+
+  /* Swiss revival drops the gradient wash entirely — flat ground only. */
+
+  ::selection {
+    background-color: rgba(240, 208, 80, 0.35);
+  }
+
+  /* Scrollbars: subtle, themed, never the ugly default white. Firefox uses
+     the standard properties; Blink/WebKit use the prefixed pseudo-elements. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(20, 20, 20, 0.20) transparent;
+  }
+  .dark * {
+    scrollbar-color: rgba(236, 234, 227, 0.20) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: rgba(20, 20, 20, 0.20);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 4px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(20, 20, 20, 0.32);
+  }
+  .dark *::-webkit-scrollbar-thumb {
+    background-color: rgba(236, 234, 227, 0.20);
+  }
+  .dark *::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(236, 234, 227, 0.32);
+  }
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+@layer components {
+  /* Swiss eyebrow label — small caps tracking with horizontal rule below.
+     Used for section identifiers ("FORUMS", "RESULTS", etc.). */
+  .swiss-eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-ink-soft);
+  }
+  .dark .swiss-eyebrow {
+    color: var(--color-dark-ink-soft);
+  }
+
+  /* Hairline rule — the structural element of Swiss layouts. 1px in the
+     ink color at low opacity so the line sits without competing with text. */
+  .swiss-rule {
+    border-bottom: 1px solid var(--color-rule);
+  }
+  .dark .swiss-rule {
+    border-bottom-color: var(--color-dark-rule);
+  }
+  .swiss-rule-top {
+    border-top: 1px solid var(--color-rule);
+  }
+  .dark .swiss-rule-top {
+    border-top-color: var(--color-dark-rule);
+  }
+}
+
+/* Entrance animations for the results section (meta-row + cards). Driven
+   by CSS keyframes — not framer-motion — because the browser runs CSS
+   transform/opacity animations on the compositor thread. When the user
+   clicks a leaf forum, React commits ~25 ResultCards in the same tick;
+   that work tied up the JS main thread and dropped every frame of a JS-
+   driven animation. Compositor-thread CSS is immune to that. */
+@keyframes swiss-meta-enter {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes swiss-results-enter {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.swiss-meta-enter {
+  animation: swiss-meta-enter 360ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.swiss-results-enter {
+  /* `both` keeps the 0-opacity from-state until the 120 ms delay elapses,
+     so the cards don't flash at full opacity before the fade begins. */
+  animation: swiss-results-enter 320ms cubic-bezier(0.4, 0, 0.2, 1) 120ms both;
+}
+
+/* Collapsible block — the grid-template-rows 0fr↔1fr trick for animating
+   height:auto without JS. Used by ForumStrip's three expand/collapse
+   layers (panel, mid-list, leaf rows): the outer element is a one-row grid
+   whose row fraction tweens, the inner overflow-hidden child clips the
+   content. Collapsed state pairs with `inert` so hidden chips drop out of
+   tab order and hit-testing. Replaced framer-motion height tweens — same
+   220 ms curve, zero JS on the main thread. */
+.swiss-collapse {
+  transition:
+    grid-template-rows 220ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Detail drawer open/close — CSS transitions on an always-mounted node
+   (replaces framer-motion AnimatePresence). Close keeps the node painted
+   through the fade via the 200 ms visibility delay, then visibility:hidden
+   removes it from hit-testing and the a11y tree. Open flips visibility
+   instantly (no delay on that side) and lets opacity/transform tween. */
+.swiss-drawer-open {
+  visibility: visible;
+}
+.swiss-drawer-closed {
+  visibility: hidden;
+  transition: visibility 0s linear 200ms;
+}
+.swiss-drawer-backdrop {
+  transition: opacity 180ms ease-out;
+}
+.swiss-drawer-closed .swiss-drawer-backdrop {
+  opacity: 0;
+}
+.swiss-drawer-panel {
+  transition:
+    opacity 180ms ease-out,
+    transform 180ms ease-out;
+}
+.swiss-drawer-closed .swiss-drawer-panel {
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+}
+
+/* Favorite-star click feedback — scale pop, retriggered by remounting the
+   span (key={pulse}) so consecutive clicks replay it. */
+@keyframes swiss-star-pulse {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+.swiss-star-pulse {
+  animation: swiss-star-pulse 220ms ease-out;
+}
+
+/* Skeleton placeholder — pulsing paper-soft rectangle used while a slow
+   query (stats / forums full-scan) is in flight. Compositor-driven via
+   opacity so it doesn't compete with the main thread. */
+@keyframes swiss-skeleton-pulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 0.85; }
+}
+.swiss-skeleton {
+  background-color: var(--color-rule);
+  border-radius: 4px;
+  animation: swiss-skeleton-pulse 1.4s ease-in-out infinite;
+}
+.dark .swiss-skeleton {
+  background-color: var(--color-dark-rule);
+}

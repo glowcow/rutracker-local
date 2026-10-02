@@ -1,0 +1,25 @@
+# Go build output
+/bin/
+/dist/
+
+# Vite build output. Keep the placeholder so `go build` can find a non-empty
+# embed target even when the frontend hasn't been built yet (CI lint/test
+# stages, fresh clones).
+web/dist/*
+!web/dist/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+*.swp
+
+# Test/coverage
+*.out
+coverage.txt
+
+# Local env overrides
+.env
+.env.local
