@@ -13,7 +13,6 @@ The code is developed in a private GitLab project; this repository is its public
 - [Configuration](#configuration)
   - [Live seeders/leechers](#live-seedersleechers-off-by-default)
   - [Send to Transmission](#send-to-transmission-optional)
-- [CLI](#cli)
 - [API](#api)
 - [Backend components](#backend-components)
 - [Project layout](#project-layout)
@@ -26,7 +25,7 @@ The code is developed in a private GitLab project; this repository is its public
 
 ## Stack
 
-- **Backend:** Go 1.25, [pgx/v5](https://github.com/jackc/pgx), [goose](https://github.com/pressly/goose) migrations (advisory-lock-serialised at boot), [cobra](https://github.com/spf13/cobra) CLI, structured logs via `log/slog`, Prometheus metrics at `/metrics`. HTTP layer ships its own gzip middleware, CSP/security headers, a cross-origin guard on mutations, dump-version ETags and a 10 s deadline on `/api/*`.
+- **Backend:** Go 1.26, [pgx/v5](https://github.com/jackc/pgx), [goose](https://github.com/pressly/goose) migrations (advisory-lock-serialised at boot), structured logs via `log/slog`, Prometheus metrics at `/metrics`. HTTP layer ships its own gzip middleware, CSP/security headers, a cross-origin guard on mutations, dump-version ETags and a 10 s deadline on `/api/*`.
 - **DB:** PostgreSQL 17 with a `tsvector` (russian config) GIN index for full-text search.
 - **Parser:** Streams a `.xml.xz` dump through `xz -dc --threads=4` (native binary), decodes with `encoding/xml`, ingests via 4 worker goroutines that `COPY` rows into a per-session `TEMP` table then `INSERT ... SELECT ... ON CONFLICT DO UPDATE` into the live table.
 - **Frontend:** React 19 + Vite + Tailwind v4 + TanStack Query + Radix Tooltip; animations are pure CSS (keyframes, transitions, `grid-template-rows` collapses) — no animation library. Built into `web/dist/` and shipped from the Go binary via `embed.FS` — one image, one container.
@@ -35,7 +34,7 @@ The parser path lands a 2.78M-row dump in ~14 minutes on a Raspberry Pi-class ho
 
 ## Quick start (Docker)
 
-The image is on Docker Hub, published per release as `glowcow/rutracker:<X.Y.Z>` — pin a version (no moving `latest` tag is published).
+The image is on Docker Hub, published per release as `glowcow/rutracker:<vX.Y.Z>` — pin a version (no moving `latest` tag is published).
 
 **Get a dump.** rutracker publishes the full catalogue as a torrent on the tracker itself — an XML dump named `rutracker-YYYYMMDD.xml.xz` (~30 GB unpacked), refreshed every few months. Download it into a directory, e.g. `./dumps`; it's mounted read-only below.
 
@@ -53,7 +52,7 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   api:
-    image: glowcow/rutracker:1.8.1   # pick a published version — no :latest tag
+    image: glowcow/rutracker:v1.8.5   # pick a published version — no :latest tag
     depends_on: [postgres]
     environment:
       POSTGRES_HOST:     postgres
@@ -93,8 +92,7 @@ Backend:
 # from repo root, with a Postgres running somewhere
 export RT_DATABASE_URL='postgres://rutracker:pw@localhost:5432/rutracker?sslmode=disable'
 
-go run ./cmd/rutracker migrate up
-go run ./cmd/rutracker serve     # http://localhost:8080
+go run ./cmd/rutracker           # migrates, then serves http://localhost:8080
 ```
 
 Frontend (separate terminal, hot reload):
@@ -113,7 +111,7 @@ go test ./...                    # Postgres integration tests skip without DATAB
 cd web && npx tsc --noEmit && npx eslint .
 ```
 
-Linting matches CI: `gofmt -l ./cmd ./internal`, `go vet ./...`, `staticcheck ./...`.
+Linting matches CI: `gofmt -l` over the tracked Go files, `go vet ./...`, `staticcheck ./...`.
 
 ## Configuration
 
@@ -159,29 +157,6 @@ The drawer's **Transmission** button pushes a torrent's magnet straight into a T
 | `RT_TRANSMISSION_HOST` | _(URL hostname)_ | `Host` header for the daemon's `rpc-host-whitelist`; defaults to the RPC URL's hostname (port stripped). |
 | `RT_TRANSMISSION_USER` | _(empty)_ | Basic-auth user — only if `rpc-authentication-required` is on. |
 | `RT_TRANSMISSION_PASS` | _(empty)_ | Basic-auth password. |
-
-## CLI
-
-```
-rutracker serve              # start the HTTP server (runs migrations first)
-rutracker parse --source S   # stream a dump into Postgres
-rutracker migrate up         # apply pending goose migrations
-rutracker migrate status     # show migration state
-```
-
-Parse flags:
-
-```
---source       string  path or shell glob; newest mtime wins (required)
---batch-size   int     rows per COPY batch (default 500)
---workers      int     parallel COPY workers (default 4)
---sweep        bool    after the parse, delete torrents missing from the new dump
-```
-
-`--sweep` enables mark-and-sweep deletion. The parser captures `SELECT NOW()`
-from postgres before the run, stamps every touched row with `NOW()` during the
-run, then deletes any row whose `last_seen_at` is older than the cutoff. Skip
-it for partial re-parses; enable it when ingesting a fresh full dump.
 
 ## API
 
@@ -514,11 +489,11 @@ The parse runs server-side and is tracked in `parser_runs`; a `running` row left
 
 ## Backend components
 
-One Go module, one binary, three subcommands sharing all the packages below. Nothing is plugged in dynamically — adding a feature usually means a new exported function in one of these packages plus a wire-up line in `cmd/rutracker/`.
+One Go module, one binary that takes no commands: it migrates the schema and serves. Nothing is plugged in dynamically — adding a feature usually means a new exported function in one of these packages plus a wire-up line in `cmd/rutracker/`.
 
 | Package | What it owns | Built on |
 |---|---|---|
-| `cmd/rutracker/` | The cobra CLI: `serve`, `parse`, `migrate up\|status`. Owns flag parsing, `log/slog` setup, SIGTERM context plumbing. | [`spf13/cobra`](https://github.com/spf13/cobra), `log/slog` |
+| `cmd/rutracker/` | Entry point: runs the migrations, then the HTTP server. Owns `log/slog` setup, SIGTERM context plumbing and the `-version` flag. | `flag`, `log/slog` |
 | `internal/config/` | Reads `RT_DATABASE_URL` or assembles a DSN from the `POSTGRES_*` env vars. URL-escapes the password via `net/url.UserPassword` so special chars don't break the connection string. | stdlib only |
 | `internal/db/` | Builds the `pgxpool.Pool` and runs goose migrations from an `embed.FS` so the binary needs no external `.sql` files at runtime. Appliers are serialised via `pg_advisory_lock` so concurrent boots can't race the same DDL. | [`pgx/v5`](https://github.com/jackc/pgx), [`pressly/goose`](https://github.com/pressly/goose) |
 | `internal/parser/` | Streams the XML dump. Spawns native `xz -dc --threads=4` via `os/exec` and feeds its stdout to `encoding/xml.Decoder`; for plain `.xml`/`.xml.gz` falls back to a direct read or `compress/gzip`. Emits each `<torrent>` element via callback, including its `<dir>`/`<file>` tree flattened to slash-joined paths. | `encoding/xml`, `os/exec`, `compress/gzip` |
@@ -534,7 +509,7 @@ Each parse worker holds its own `*pgxpool.Conn` for the lifetime of the run; the
 ## Project layout
 
 ```
-cmd/rutracker/        # cobra entry point: serve / parse / migrate
+cmd/rutracker/        # entry point: migrate, then serve
 internal/
   bbcode/             # BBCode -> safe HTML renderer + unit tests
   config/             # env loading + Postgres DSN
@@ -546,7 +521,7 @@ internal/
   store/              # Torrent type, CopyIngester, parser_runs, Sweep, peers, files, queries
 web/                  # Vite + React + Tailwind v4 SPA, embedded into the binary
 grafana/              # importable Grafana dashboard JSON
-Dockerfile            # multi-stage: node → golang → alpine
+Dockerfile            # multi-stage: node → golang → alpine (in the GitHub snapshot)
 ```
 
 ## Operations
@@ -559,12 +534,6 @@ Dumps are loaded from the **Parser panel in the app** (the database icon in the 
 - **Starting a parse needs the admin token** — `RT_ADMIN_TOKEN` in the server's environment (empty → the start endpoint is disabled). Paste it once in the panel; it's kept in the browser's `localStorage` and sent as a bearer token on the start call only.
 
 Panel options: the **dump** (a picker over the container's `/dumps` mount), **batch size** (`500` for top-ups, `1000` for a cold full load), and **sweep** — turn it on **only for a full dump** (it deletes torrents missing from the new dump; a partial re-parse with sweep on wipes legitimate rows). A full dump lands in ~14 min.
-
-The same pipeline is available from the CLI for local or offline runs:
-
-```bash
-rutracker parse --source '/dumps/rutracker-*.xml.xz' --batch-size 1000 --sweep
-```
 
 ### Reclaim Postgres bloat (one-shot VACUUM FULL)
 
@@ -598,11 +567,11 @@ Online alternative — `pg_repack` (via triggers + shadow copy) avoids the exclu
 
 ## Releases
 
-Images are built by CI in the private repository on `vX.Y.Z` tags: **lint** (gofmt / vet / staticcheck + `tsc` / eslint) → **test** (`go test -race` against a real Postgres 17) → **image** (build + push `glowcow/rutracker:X.Y.Z` to Docker Hub).
+Images are built by CI in the private repository on `vX.Y.Z` tags: **lint** (gofmt / vet / staticcheck + `tsc` / eslint) → **test** (`go test -race` against a real Postgres 17) → **image** (build + push `glowcow/rutracker:vX.Y.Z` to Docker Hub). The same lint, test and image build run on every push to the default branch, without a push to the Hub.
 
 Each tag also lands here as a [GitHub release](https://github.com/glowcow/rutracker-local/releases): one source-snapshot commit plus notes built from the commit subjects since the previous tag.
 
-Only the version tag is published — no moving `:latest`. (A `:latest` sharing a digest with the pinned `:X.Y.Z` is a footgun: `docker system prune -a` on the host strips the version tag off the shared image, leaving a running container floating on an untagged id.)
+Only the version tag is published — no moving `:latest`. (A `:latest` sharing a digest with the pinned `:vX.Y.Z` is a footgun: `docker system prune -a` on the host strips the version tag off the shared image, leaving a running container floating on an untagged id.)
 
 ## Disclaimer
 
@@ -610,4 +579,4 @@ This project ships **no rutracker content**: it is a viewer for the dump that ru
 
 ## License
 
-[MIT](LICENSE) © 2026 Anton Sedyuk
+[MIT](LICENSE) © 2026 Anton Sediuk

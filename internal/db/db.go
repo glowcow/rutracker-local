@@ -66,18 +66,3 @@ func MigrateUp(ctx context.Context, url string) error {
 	}
 	return goose.UpContext(ctx, db, "migrations")
 }
-
-// MigrateStatus prints the migration status table to stdout.
-func MigrateStatus(ctx context.Context, url string) error {
-	db, err := sql.Open("pgx", url)
-	if err != nil {
-		return fmt.Errorf("open sql: %w", err)
-	}
-	defer db.Close()
-
-	goose.SetBaseFS(migrationsFS)
-	if err := goose.SetDialect("postgres"); err != nil {
-		return fmt.Errorf("set dialect: %w", err)
-	}
-	return goose.StatusContext(ctx, db, "migrations")
-}

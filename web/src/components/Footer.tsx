@@ -2,7 +2,8 @@ import { useLang } from "../lib/i18n";
 import { cn } from "../lib/cn";
 import { Tooltip } from "./Tooltip";
 
-const VERSION = import.meta.env.VITE_APP_VERSION ?? "dev";
+// The build passes the git tag; the footer adds its own "v".
+const VERSION = (import.meta.env.VITE_APP_VERSION ?? "dev").replace(/^v/, "");
 const COMMIT = import.meta.env.VITE_APP_COMMIT ?? "local";
 const BUILD_DATE = (import.meta.env.VITE_APP_BUILD_DATE ?? new Date().toISOString()).slice(0, 10);
 

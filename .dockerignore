@@ -3,23 +3,24 @@
 .gitlab-ci.yml
 .gitlab/
 .dockerignore
-README.md
 Dockerfile
+README.md
 
-# Node leftovers. Patterns are anchored to the context root, so a bare
-# `node_modules/` only matches a top-level dir — web/ needs its own entry.
-node_modules/
-web/node_modules/
+# CI caches inside the project directory.
+.gocache/
+.gomodcache/
+.npm/
 
-# Editor / OS
 .idea/
 .vscode/
 .DS_Store
 
-# Build output. web/dist must be excluded explicitly: the Dockerfile's
-# `COPY . .` would otherwise merge stale local bundles into the image
-# before `COPY --from=web` drops in the fresh ones (content-hashed names
-# never collide, so old files survive and get picked up by go:embed).
+# Patterns are anchored to the context root, so web/ needs its own entries.
+node_modules/
+web/node_modules/
+
+# web/dist is rebuilt in the image; a stale local bundle would be embedded too.
 bin/
 dist/
 web/dist/
+.data/

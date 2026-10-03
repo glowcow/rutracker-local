@@ -1,20 +1,18 @@
-# syntax=docker/dockerfile:1.7
+ARG NODE_VERSION=26.7.0
+ARG GO_VERSION=1.26.6
+ARG ALPINE_VERSION=3.24.2
 
-# ----------------------------------------------------------------------
-# Stage 1: build the Vite SPA (web/ → web/dist). Copy package+lock first so
-# npm ci caches when source churns but deps don't.
-# ----------------------------------------------------------------------
-FROM node:24.21.0 AS web
+# Vite SPA: web/ -> web/dist.
+FROM node:${NODE_VERSION}-alpine AS web
 WORKDIR /web
 
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-fund --no-audit
 
-# Build stamp shown in the footer. VITE_* prefix is mandatory (Vite only exposes
-# those via import.meta.env). Defaults keep local `docker build` working.
+# Build stamp for the frontend; Vite exposes only VITE_* variables.
 ARG VERSION=dev
-ARG COMMIT=local
-ARG BUILD_DATE=
+ARG COMMIT=none
+ARG BUILD_DATE=unknown
 ENV VITE_APP_VERSION=$VERSION \
     VITE_APP_COMMIT=$COMMIT \
     VITE_APP_BUILD_DATE=$BUILD_DATE
@@ -22,48 +20,41 @@ ENV VITE_APP_VERSION=$VERSION \
 COPY web/ ./
 RUN npm run build
 
-# ----------------------------------------------------------------------
-# Stage 2: compile a static Go binary with the built SPA embedded.
-# CGO_ENABLED=0 so the result runs on distroless/static (no libc).
-# ----------------------------------------------------------------------
-FROM golang:1.25.7 AS build
-
+FROM golang:${GO_VERSION}-alpine AS build
 WORKDIR /src
 
-# Cache module downloads in a separate layer — only re-runs when go.mod/sum change.
-COPY go.mod go.sum ./
+# go.su[m] is a glob: a module without dependencies has no go.sum.
+COPY go.mod go.su[m] ./
 RUN go mod download
 
 COPY . .
-
-# Drop in the freshly built SPA. The committed web/dist/.gitkeep gets
-# overwritten by Vite output here, then //go:embed all:dist picks it up.
+# The built SPA is embedded through //go:embed all:dist.
 COPY --from=web /web/dist ./web/dist
 
 ARG VERSION=dev
-RUN CGO_ENABLED=0 GOOS=linux \
-    go build \
+ARG COMMIT=none
+ARG BUILD_DATE=unknown
+ARG GO_PACKAGE=""
+# Main package: GO_PACKAGE, else the only directory in cmd/, else the root.
+RUN PKG="${GO_PACKAGE}"; \
+    if [ -z "$PKG" ]; then PKG=.; if [ -d cmd ]; then PKG="./cmd/$(ls cmd)"; fi; fi; \
+    CGO_ENABLED=0 go build \
       -trimpath \
-      -ldflags="-s -w -X main.version=${VERSION}" \
-      -o /out/rutracker \
-      ./cmd/rutracker
+      -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${BUILD_DATE}" \
+      -o /out/app "$PKG"
 
-# ----------------------------------------------------------------------
-# Stage 3: alpine runtime. Needs native `xz` on PATH — the parser stream-
-# decompresses dumps via os/exec (pure-Go xz capped the pipeline at ~700 rows/s;
-# native hits 30-60+ MB/s). ~10 MB image (vs distroless 2 MB). uid 65532 =
-# distroless nonroot, so rt_api's `group_add: NAS_GID` reads the /dumps mount.
-# ----------------------------------------------------------------------
-FROM alpine:3.24.2
+FROM alpine:${ALPINE_VERSION}
 
-RUN apk add --no-cache xz ca-certificates tzdata && \
+ARG IMAGE_PACKAGES="xz"
+# uid 65532 matches distroless nonroot, so host volume ownership stays valid.
+RUN apk add --no-cache ca-certificates tzdata ${IMAGE_PACKAGES} && \
     addgroup -S -g 65532 nonroot && \
-    adduser  -S -u 65532 -G nonroot nonroot
+    adduser -S -u 65532 -G nonroot nonroot
 
-COPY --from=build /out/rutracker /rutracker
+COPY --from=build /out/app /usr/local/bin/app
 
-EXPOSE 8080
+ARG IMAGE_PORT=8080
+EXPOSE ${IMAGE_PORT}
 USER nonroot:nonroot
 
-ENTRYPOINT ["/rutracker"]
-CMD ["serve"]
+ENTRYPOINT ["/usr/local/bin/app"]
