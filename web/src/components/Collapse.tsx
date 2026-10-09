@@ -21,7 +21,8 @@ export function Collapse({
         open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
       )}
     >
-      <div className="min-h-0 overflow-hidden">
+      {/* The side bleed keeps a focus ring at the edge out of the clip. */}
+      <div className="min-h-0 overflow-hidden -mx-1 px-1">
         <div className={className}>{children}</div>
       </div>
     </div>
