@@ -28,7 +28,7 @@ const BATCH_SIZES = [250, 500, 1000];
 // / live progress+logs via SSE) is open; starting a parse needs the token. The
 // parse runs server-side, so progress survives reload / other devices.
 export function AdminPanel({ open, onClose }: Props) {
-  const { t } = useLang();
+  const { t, locale } = useLang();
 
   const [token, setTokenState] = useState(getToken());
   const [tokenDraft, setTokenDraft] = useState("");
@@ -129,7 +129,7 @@ export function AdminPanel({ open, onClose }: Props) {
     <div className={cn(open ? "swiss-drawer-open" : "swiss-drawer-closed")}>
       <div
         onClick={onClose}
-        className="swiss-drawer-backdrop fixed inset-0 z-40 bg-[var(--color-ink)]/60 backdrop-blur-xs"
+        className="swiss-drawer-backdrop fixed inset-0 z-40 bg-[var(--color-scrim)] backdrop-blur-xs"
       />
       <div
         className={cn(
@@ -143,8 +143,8 @@ export function AdminPanel({ open, onClose }: Props) {
           className={cn(
             "swiss-drawer-panel pointer-events-auto",
             "w-full max-w-3xl max-h-[calc(100svh-2rem)]",
-            "bg-[var(--color-paper)] dark:bg-[var(--color-dark-paper)]",
-            "border border-[var(--color-rule)] dark:border-[var(--color-dark-rule)]",
+            "bg-[var(--color-paper)]",
+            "border border-[var(--color-rule)]",
             "rounded-lg overflow-hidden flex flex-col",
           )}
         >
@@ -152,7 +152,7 @@ export function AdminPanel({ open, onClose }: Props) {
           <div className="flex items-center justify-between px-5 sm:px-6 h-14 sm:h-16 shrink-0 swiss-rule">
             <div className="swiss-eyebrow">
               {t("admin_title")} /{" "}
-              <span className="normal-case text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
+              <span className="normal-case text-[var(--color-ink-muted)]">
                 {t("admin_subtitle")}
               </span>
             </div>
@@ -161,8 +161,8 @@ export function AdminPanel({ open, onClose }: Props) {
               aria-label={t("admin_close")}
               className={cn(
                 "size-10 grid place-items-center -mr-2",
-                "text-[var(--color-ink-soft)] dark:text-[var(--color-dark-ink-soft)]",
-                "hover:text-[var(--color-ink)] dark:hover:text-[var(--color-dark-ink)]",
+                "text-[var(--color-ink-soft)]",
+                "hover:text-[var(--color-ink)]",
                 "transition-colors",
               )}
             >
@@ -174,10 +174,10 @@ export function AdminPanel({ open, onClose }: Props) {
           <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 sm:py-6 space-y-6">
             {/* Token */}
             {token ? (
-              <div className="flex items-center gap-2 text-[12px] text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
+              <div className="flex items-center gap-2 text-[12px] text-[var(--color-ink-muted)]">
                 <KeyRound className="size-3.5 text-[var(--color-accent)]" />
                 <span>{t("admin_token_saved")}</span>
-                <span className="text-[var(--color-rule)] dark:text-[var(--color-dark-rule)]">·</span>
+                <span className="text-[var(--color-rule)]">·</span>
                 <button
                   onClick={changeToken}
                   className="swiss-eyebrow hover:text-[var(--color-accent)] transition-colors"
@@ -203,7 +203,7 @@ export function AdminPanel({ open, onClose }: Props) {
                     data-lpignore="true"
                     className={cn(
                       "flex-1 min-w-0 h-10 px-3 rounded-md text-[14px]",
-                      "bg-[var(--color-paper-soft)] dark:bg-[var(--color-dark-paper-soft)]",
+                      "bg-[var(--color-paper-soft)]",
                       "border-l-2 border-transparent focus:border-[var(--color-accent)] outline-none",
                       "transition-colors",
                     )}
@@ -212,7 +212,7 @@ export function AdminPanel({ open, onClose }: Props) {
                     onClick={saveToken}
                     className={cn(
                       "h-10 px-4 rounded-md shrink-0",
-                      "border border-[var(--color-rule)] dark:border-[var(--color-dark-rule)]",
+                      "border border-[var(--color-rule)]",
                       "text-[11px] font-semibold uppercase tracking-[0.08em]",
                       "hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-colors",
                     )}
@@ -226,7 +226,7 @@ export function AdminPanel({ open, onClose }: Props) {
             {/* Dump */}
             <Field label={t("admin_dump")}>
               {dumps.length === 0 ? (
-                <div className="text-[13px] text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
+                <div className="text-[13px] text-[var(--color-ink-muted)]">
                   {t("admin_no_dumps")}
                 </div>
               ) : (
@@ -247,8 +247,8 @@ export function AdminPanel({ open, onClose }: Props) {
                   className={cn(
                     "text-[12px] leading-snug flex-1",
                     sweep
-                      ? "text-red-700 dark:text-red-400"
-                      : "text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]",
+                      ? "text-[var(--color-down)]"
+                      : "text-[var(--color-ink-muted)]",
                   )}
                 >
                   {t("admin_sweep_hint")}
@@ -263,7 +263,7 @@ export function AdminPanel({ open, onClose }: Props) {
                 disabled={running || !token || dumps.length === 0}
                 className={cn(
                   "w-full h-11 grid place-items-center rounded-md",
-                  "bg-[var(--color-accent)] text-[var(--color-ink)]",
+                  "bg-[var(--color-accent)] text-[var(--color-on-accent)]",
                   "text-[11px] font-semibold uppercase tracking-[0.08em]",
                   "hover:bg-[var(--color-accent-hover)] transition-colors",
                   "disabled:opacity-40 disabled:hover:bg-[var(--color-accent)]",
@@ -275,12 +275,12 @@ export function AdminPanel({ open, onClose }: Props) {
                 </span>
               </button>
               {!token && (
-                <p className="mt-2 text-[11.5px] text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)] text-center">
+                <p className="mt-2 text-[11.5px] text-[var(--color-ink-muted)] text-center">
                   {t("admin_token_required")}
                 </p>
               )}
               {startErr && (
-                <p className="mt-2 text-[12px] text-red-700 dark:text-red-400 text-center">{startErr}</p>
+                <p className="mt-2 text-[12px] text-[var(--color-down)] text-center">{startErr}</p>
               )}
             </div>
 
@@ -289,11 +289,11 @@ export function AdminPanel({ open, onClose }: Props) {
               <div className="swiss-rule-top pt-5 space-y-2">
                 <div className="swiss-eyebrow">{t("admin_recent")}</div>
                 {recent.length === 0 ? (
-                  <div className="text-[12px] text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
+                  <div className="text-[12px] text-[var(--color-ink-muted)]">
                     {t("admin_no_runs")}
                   </div>
                 ) : (
-                  <div className="rounded-md border border-[var(--color-rule)] dark:border-[var(--color-dark-rule)] divide-y divide-[var(--color-rule)] dark:divide-[var(--color-dark-rule)]">
+                  <div className="rounded-md border border-[var(--color-rule)] divide-y divide-[var(--color-rule)]">
                     {recent.map((r) => (
                       <RunRow key={r.id} run={r} />
                     ))}
@@ -308,7 +308,7 @@ export function AdminPanel({ open, onClose }: Props) {
                 <div className="flex items-center justify-between">
                   <StatusPill status={status} />
                   {progress && (
-                    <span className="text-[12px] tabular-nums text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
+                    <span className="text-[12px] tabular-nums text-[var(--color-ink-muted)]">
                       {t("admin_elapsed")} {fmtDur(progress.elapsed_s)}
                     </span>
                   )}
@@ -321,16 +321,16 @@ export function AdminPanel({ open, onClose }: Props) {
                       {(progress?.pct ?? 0).toFixed(1)}%
                     </span>
                     {progress && status === "running" && (
-                      <span className="text-[12px] tabular-nums text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
+                      <span className="text-[12px] tabular-nums text-[var(--color-ink-muted)]">
                         {t("admin_eta")} {fmtDur(progress.eta_s)}
                       </span>
                     )}
                   </div>
-                  <div className="h-1.5 rounded-full bg-[var(--color-paper-soft)] dark:bg-[var(--color-dark-paper-soft)] overflow-hidden">
+                  <div className="h-1.5 rounded-full bg-[var(--color-paper-soft)] overflow-hidden">
                     <div
                       className={cn(
                         "h-full rounded-full transition-[width] duration-300 ease-out",
-                        status === "failed" ? "bg-red-600" : "bg-[var(--color-accent)]",
+                        status === "failed" ? "bg-[var(--color-down)]" : "bg-[var(--color-accent)]",
                       )}
                       style={{ width: `${progress?.pct ?? 0}%` }}
                     />
@@ -339,10 +339,10 @@ export function AdminPanel({ open, onClose }: Props) {
 
                 {/* Stats */}
                 {progress && (
-                  <div className="grid grid-cols-3 divide-x divide-[var(--color-rule)] dark:divide-[var(--color-dark-rule)]">
-                    <Stat label={t("admin_rows")} value={progress.rows.toLocaleString("ru-RU")} />
+                  <div className="grid grid-cols-3 divide-x divide-[var(--color-rule)]">
+                    <Stat label={t("admin_rows")} value={progress.rows.toLocaleString(locale)} />
                     <Stat label="MB" value={`${progress.read_mb} / ${progress.total_mb}`} />
-                    <Stat label={t("admin_rate")} value={progress.rate_rows_s.toLocaleString("ru-RU")} />
+                    <Stat label={t("admin_rate")} value={progress.rate_rows_s.toLocaleString(locale)} />
                   </div>
                 )}
 
@@ -353,29 +353,29 @@ export function AdminPanel({ open, onClose }: Props) {
                     ref={logBoxRef}
                     className={cn(
                       "h-72 max-h-[45vh] overflow-y-auto rounded-md p-3",
-                      "bg-[var(--color-paper-soft)] dark:bg-[var(--color-dark-paper-soft)]",
+                      "bg-[var(--color-paper-soft)]",
                       "font-mono text-[11.5px] leading-relaxed",
                     )}
                   >
                     {logs.map((l) => (
                       <div key={l.id} className="whitespace-pre-wrap break-words">
                         {l.ts && (
-                          <span className="text-[var(--color-ink-muted)]/70 dark:text-[var(--color-dark-ink-muted)]/70">
+                          <span className="text-[var(--color-ink-muted)]/70">
                             {l.ts}
                             {"  "}
                           </span>
                         )}
                         <span
                           className={cn(
-                            l.level === "error" && "text-red-600 dark:text-red-400",
-                            l.level === "warn" && "text-[var(--color-accent)]",
-                            l.level === "info" && "text-[var(--color-ink)] dark:text-[var(--color-dark-ink)]",
+                            l.level === "error" && "text-[var(--color-down)]",
+                            l.level === "warn" && "text-[var(--color-warn)]",
+                            l.level === "info" && "text-[var(--color-ink)]",
                           )}
                         >
                           {l.msg}
                         </span>
                         {l.detail && (
-                          <span className="text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
+                          <span className="text-[var(--color-ink-muted)]">
                             {"   "}
                             {l.detail}
                           </span>
@@ -450,7 +450,7 @@ function DumpSelect({
         disabled={disabled}
         className={cn(
           "w-full h-10 pl-3 pr-9 rounded-md text-[14px] text-left flex items-center",
-          "bg-[var(--color-paper-soft)] dark:bg-[var(--color-dark-paper-soft)]",
+          "bg-[var(--color-paper-soft)]",
           "border-l-2 outline-none transition-colors disabled:opacity-50",
           open ? "border-[var(--color-accent)]" : "border-transparent",
         )}
@@ -459,7 +459,7 @@ function DumpSelect({
           {selected && (
             <>
               <span className="font-medium">{selected.name}</span>
-              <span className="text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
+              <span className="text-[var(--color-ink-muted)]">
                 {" — "}
                 {formatBytes(selected.size_bytes)} · {formatDate(selected.mtime)}
               </span>
@@ -469,7 +469,7 @@ function DumpSelect({
         <ChevronDown
           className={cn(
             "pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 size-4 transition-transform",
-            "text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]",
+            "text-[var(--color-ink-muted)]",
             open && "rotate-180",
           )}
         />
@@ -479,9 +479,9 @@ function DumpSelect({
         <div
           className={cn(
             "absolute z-20 mt-1 w-full rounded-md overflow-hidden py-1",
-            "bg-[var(--color-paper)] dark:bg-[var(--color-dark-paper)]",
-            "border border-[var(--color-rule)] dark:border-[var(--color-dark-rule)]",
-            "shadow-[0_12px_30px_-12px_rgba(20,20,20,0.35)] dark:shadow-[0_12px_30px_-12px_rgba(0,0,0,0.6)]",
+            "bg-[var(--color-paper)]",
+            "border border-[var(--color-rule)]",
+            "shadow-[var(--shadow-menu)]",
           )}
         >
           {dumps.map((d) => {
@@ -496,13 +496,13 @@ function DumpSelect({
                 }}
                 className={cn(
                   "w-full text-left px-3 py-2 text-[13px] flex items-center gap-2",
-                  "hover:bg-[var(--color-paper-soft)] dark:hover:bg-[var(--color-dark-paper-soft)] transition-colors",
+                  "hover:bg-[var(--color-paper-soft)] transition-colors",
                 )}
               >
                 <Check className={cn("size-3.5 shrink-0 text-[var(--color-accent)]", !active && "invisible")} />
                 <span className="truncate min-w-0">
                   <span className={cn("font-medium", active && "text-[var(--color-accent)]")}>{d.name}</span>
-                  <span className="text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
+                  <span className="text-[var(--color-ink-muted)]">
                     {" — "}
                     {formatBytes(d.size_bytes)} · {formatDate(d.mtime)}
                   </span>
@@ -531,7 +531,7 @@ function Segmented({
     <div
       className={cn(
         "inline-flex gap-0.5 p-0.5 rounded-md",
-        "bg-[var(--color-paper-soft)] dark:bg-[var(--color-dark-paper-soft)]",
+        "bg-[var(--color-paper-soft)]",
         disabled && "opacity-50 pointer-events-none",
       )}
     >
@@ -544,8 +544,8 @@ function Segmented({
             className={cn(
               "px-4 h-8 rounded-[5px] text-[12px] font-medium tabular-nums transition-colors",
               active
-                ? "bg-[var(--color-paper)] dark:bg-[var(--color-dark-paper)] text-[var(--color-ink)] dark:text-[var(--color-dark-ink)] shadow-sm"
-                : "text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)] hover:text-[var(--color-ink)] dark:hover:text-[var(--color-dark-ink)]",
+                ? "bg-[var(--color-paper)] text-[var(--color-ink)] shadow-sm"
+                : "text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]",
             )}
           >
             {o}
@@ -573,12 +573,12 @@ function Toggle({
       disabled={disabled}
       className={cn(
         "relative w-9 h-5 rounded-full shrink-0 transition-colors disabled:opacity-50",
-        checked ? "bg-red-600" : "bg-[var(--color-rule)] dark:bg-[var(--color-dark-rule)]",
+        checked ? "bg-[var(--color-down)]" : "bg-[var(--color-rule)]",
       )}
     >
       <span
         className={cn(
-          "absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-sm transition-transform",
+          "absolute top-0.5 left-0.5 size-4 rounded-full bg-[var(--color-paper)] transition-transform",
           checked && "translate-x-4",
         )}
       />
@@ -596,24 +596,24 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 function RunRow({ run }: { run: RunSummary }) {
-  const { t } = useLang();
+  const { t, locale } = useLang();
   const dot =
-    run.status === "succeeded" ? "bg-emerald-500" : run.status === "failed" ? "bg-red-600" : "bg-[var(--color-accent)]";
+    run.status === "succeeded" ? "bg-[var(--color-up)]" : run.status === "failed" ? "bg-[var(--color-down)]" : "bg-[var(--color-accent)]";
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 text-[12px]">
       <span className={cn("size-2 rounded-full shrink-0", dot)} />
       <div className="min-w-0 flex-1">
         <div className="truncate font-medium">{run.source}</div>
-        <div className="text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)] tabular-nums">
+        <div className="text-[var(--color-ink-muted)] tabular-nums">
           {formatDate(run.finished_at ?? run.started_at)}
         </div>
       </div>
       <div className="text-right tabular-nums shrink-0 leading-tight">
         <div className="font-medium">
-          {run.rows.toLocaleString("ru-RU")} {t("admin_rows")}
+          {run.rows.toLocaleString(locale)} {t("admin_rows")}
         </div>
-        <div className="text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
-          {run.sweep && <>sweep −{run.swept.toLocaleString("ru-RU")} · </>}
+        <div className="text-[var(--color-ink-muted)]">
+          {run.sweep && <>sweep −{run.swept.toLocaleString(locale)} · </>}
           {fmtDur(run.duration_s)}
         </div>
       </div>
@@ -627,7 +627,7 @@ function StatusPill({ status }: { status: ParseStatus }) {
     idle: {
       label: t("admin_status_idle"),
       dot: "bg-[var(--color-ink-muted)]",
-      text: "text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]",
+      text: "text-[var(--color-ink-muted)]",
     },
     running: {
       label: t("admin_status_running"),
@@ -636,13 +636,13 @@ function StatusPill({ status }: { status: ParseStatus }) {
     },
     succeeded: {
       label: t("admin_status_succeeded"),
-      dot: "bg-emerald-500",
-      text: "text-emerald-600 dark:text-emerald-400",
+      dot: "bg-[var(--color-up)]",
+      text: "text-[var(--color-up)]",
     },
     failed: {
       label: t("admin_status_failed"),
-      dot: "bg-red-600",
-      text: "text-red-600 dark:text-red-400",
+      dot: "bg-[var(--color-down)]",
+      text: "text-[var(--color-down)]",
     },
   };
   const s = map[status];

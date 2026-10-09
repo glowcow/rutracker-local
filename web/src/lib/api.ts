@@ -1,6 +1,4 @@
-// Thin wrappers over the Go backend at /api/*.
-// During dev, Vite proxies /api to localhost:8080 (see vite.config.ts).
-// In production, the same Go binary serves both the SPA and the API.
+// The only fetch calls of the app: wrappers over the Go backend at /api/*.
 
 export type Torrent = {
   id: number;
@@ -60,31 +58,56 @@ export type SearchParams = {
   limit?: number;
 };
 
-async function get<T>(path: string): Promise<T> {
-  const r = await fetch(path);
-  if (!r.ok) {
-    let msg = `HTTP ${r.status}`;
-    try {
-      const body = await r.json();
-      if (body?.error) msg = `${msg}: ${body.error}`;
-    } catch {
-      // body wasn't JSON
+// A non-2xx throws the path and status, plus the body's `error` when it has one.
+async function fail(path: string, res: Response): Promise<never> {
+  let detail = "";
+  try {
+    const body: unknown = await res.json();
+    if (body && typeof body === "object" && "error" in body && typeof body.error === "string") {
+      detail = ` (${body.error})`;
     }
-    throw new Error(msg);
+  } catch {
+    // The body wasn't JSON.
   }
-  return r.json() as Promise<T>;
+  throw new Error(`${path}: ${res.status}${detail}`);
+}
+
+/** The bare request, for a caller that reads the status itself. */
+export function send(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(path, { ...init, headers: { Accept: "application/json", ...init?.headers } });
+}
+
+/** A mutation: any non-2xx throws. */
+export async function sendOK(path: string, method: "POST" | "DELETE"): Promise<Response> {
+  const res = await send(path, { method });
+  if (!res.ok) await fail(path, res);
+  return res;
+}
+
+export async function getJSON<T>(path: string): Promise<T> {
+  const res = await send(path);
+  if (!res.ok) await fail(path, res);
+  return res.json() as Promise<T>;
+}
+
+/** null on 404: the endpoint's feature or record is absent. */
+export async function getOptionalJSON<T>(path: string): Promise<T | null> {
+  const res = await send(path);
+  if (res.status === 404) return null;
+  if (!res.ok) await fail(path, res);
+  return res.json() as Promise<T>;
 }
 
 export function getStats() {
-  return get<Stats>("/api/stats");
+  return getJSON<Stats>("/api/stats");
 }
 
 export function getForums() {
-  return get<{ items: Forum[] }>("/api/forums");
+  return getJSON<{ items: Forum[] }>("/api/forums");
 }
 
 export function getTorrent(id: number) {
-  return get<TorrentDetail>(`/api/torrents/${id}`);
+  return getJSON<TorrentDetail>(`/api/torrents/${id}`);
 }
 
 // File listing carried by the dump. Entries are [path, size] tuples — the
@@ -97,19 +120,15 @@ export type TorrentFiles = {
   files: [string, number][];
 };
 
-export async function getTorrentFiles(id: number): Promise<TorrentFiles | null> {
-  const r = await fetch(`/api/torrents/${id}/files`);
-  if (r.status === 404) return null;
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json() as Promise<TorrentFiles>;
-}
+export const getTorrentFiles = (id: number) =>
+  getOptionalJSON<TorrentFiles>(`/api/torrents/${id}/files`);
 
 // Transmission feature state: configured (endpoint set → render the button)
 // and online (live probe → active vs greyed-out). Both false when off.
 export type TransmissionStatus = { configured: boolean; online: boolean };
 
 export function getTransmissionStatus() {
-  return get<TransmissionStatus>("/api/transmission/status");
+  return getJSON<TransmissionStatus>("/api/transmission/status");
 }
 
 // Push a torrent's magnet into Transmission. "added" = queued now, "duplicate"
@@ -118,18 +137,8 @@ export function getTransmissionStatus() {
 export type DownloadResult = { status: "added" | "duplicate"; name?: string };
 
 export async function sendToTransmission(id: number): Promise<DownloadResult> {
-  const r = await fetch(`/api/torrents/${id}/download`, { method: "POST" });
-  if (!r.ok) {
-    let msg = `HTTP ${r.status}`;
-    try {
-      const body = await r.json();
-      if (body?.error) msg = `${msg}: ${body.error}`;
-    } catch {
-      // body wasn't JSON
-    }
-    throw new Error(msg);
-  }
-  return r.json() as Promise<DownloadResult>;
+  const res = await sendOK(`/api/torrents/${id}/download`, "POST");
+  return res.json() as Promise<DownloadResult>;
 }
 
 export function searchTorrents(p: SearchParams) {
@@ -141,5 +150,5 @@ export function searchTorrents(p: SearchParams) {
   if (p.offset !== undefined) qs.set("offset", String(p.offset));
   if (p.limit !== undefined) qs.set("limit", String(p.limit));
   const url = qs.toString() ? `/api/search?${qs}` : "/api/search";
-  return get<SearchResponse>(url);
+  return getJSON<SearchResponse>(url);
 }

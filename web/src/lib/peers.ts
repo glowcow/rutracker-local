@@ -1,3 +1,5 @@
+import { getJSON } from "./api";
+
 // Client for the live seeders/leechers endpoint (GET /api/torrents/:id/peers).
 // The server returns cache when fresh (< 24h) and otherwise scrapes rutracker;
 // on a failed scrape it hands back the stale cache plus an `error` reason.
@@ -25,9 +27,7 @@ type PeersJSON = {
 };
 
 export async function getPeers(id: number): Promise<PeersState> {
-  const r = await fetch(`/api/torrents/${id}/peers`);
-  if (!r.ok) throw new Error(`peers HTTP ${r.status}`);
-  const j = (await r.json()) as PeersJSON;
+  const j = await getJSON<PeersJSON>(`/api/torrents/${id}/peers`);
   return {
     configured: j.configured,
     seeders: j.seeders ?? null,

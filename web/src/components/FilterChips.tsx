@@ -33,7 +33,7 @@ export function FilterChips({ chips, onRemove, onClearAll }: Props) {
         // Tooltips (not nested) — Radix wants one trigger per Tooltip.Root.
         <div
           key={c.id}
-          className="flex items-center gap-1 text-[12px] min-w-0 max-w-full text-[var(--color-ink)] dark:text-[var(--color-dark-ink)]"
+          className="flex items-center gap-1 text-[12px] min-w-0 max-w-full text-[var(--color-ink)]"
         >
           <Tooltip text={c.tooltip}>
             <div className="flex items-baseline gap-2 min-w-0 cursor-default">
@@ -64,7 +64,7 @@ export function FilterChips({ chips, onRemove, onClearAll }: Props) {
                 strokeWidth={2.25}
                 className={cn(
                   "size-3.5",
-                  "text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]",
+                  "text-[var(--color-ink-muted)]",
                   "group-hover:text-[var(--color-accent)] transition-colors",
                 )}
               />
@@ -77,7 +77,7 @@ export function FilterChips({ chips, onRemove, onClearAll }: Props) {
           onClick={onClearAll}
           className={cn(
             "swiss-eyebrow",
-            "text-[var(--color-ink-soft)] dark:text-[var(--color-dark-ink-soft)]",
+            "text-[var(--color-ink-soft)]",
             "hover:text-[var(--color-accent)] transition-colors",
           )}
         >

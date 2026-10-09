@@ -12,7 +12,7 @@ import { MetaLabel } from "./MetaRow";
 
 type TFn = (k: keyof Dict) => string;
 
-const greyCls = "text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]";
+const greyCls = "text-[var(--color-ink-muted)]";
 
 // "только что" / "5 ч назад" — short units so no RU pluralisation is needed.
 function timeAgo(iso: string, t: TFn): string {
@@ -42,11 +42,11 @@ function Numbers({ seeders, leechers, grey }: { seeders: number; leechers: numbe
   // drawer meta / 12px list rail) and sits on the same baseline as neighbours.
   return (
     <span className="tabular-nums font-medium whitespace-nowrap">
-      <span className={grey ? greyCls : "text-emerald-600 dark:text-emerald-400"}>
+      <span className={grey ? greyCls : "text-[var(--color-up)]"}>
         <ArrowUp className={numIcon} strokeWidth={2.5} />
         {seeders}
       </span>
-      <span className={cn("ml-2.5", grey ? greyCls : "text-red-600 dark:text-red-400")}>
+      <span className={cn("ml-2.5", grey ? greyCls : "text-[var(--color-down)]")}>
         <ArrowDown className={numIcon} strokeWidth={2.5} />
         {leechers}
       </span>

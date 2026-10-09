@@ -42,7 +42,7 @@ export function Pagination({ page, pageSize, total, onChange }: Props) {
         p === "…" ? (
           <span
             key={`gap-${i}`}
-            className="text-[12px] text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)] tabular-nums"
+            className="text-[12px] text-[var(--color-ink-muted)] tabular-nums"
             aria-hidden="true"
           >
             …
@@ -103,7 +103,7 @@ function PageButton({
         "min-w-6 text-[13px] tabular-nums transition-colors",
         active
           ? "text-[var(--color-accent)] font-semibold"
-          : "text-[var(--color-ink-soft)] dark:text-[var(--color-dark-ink-soft)] hover:text-[var(--color-ink)] dark:hover:text-[var(--color-dark-ink)]",
+          : "text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]",
       )}
     >
       {children}
@@ -132,7 +132,7 @@ function StepButton({
         "size-7 grid place-items-center transition-colors",
         disabled
           ? "opacity-30 cursor-not-allowed"
-          : "text-[var(--color-ink-soft)] dark:text-[var(--color-dark-ink-soft)] hover:text-[var(--color-accent)]",
+          : "text-[var(--color-ink-soft)] hover:text-[var(--color-accent)]",
       )}
     >
       {children}

@@ -1,22 +1,19 @@
-// Runs before first paint — a blocking <script> in <head>, ahead of the
-// deferred module bundle — so a dark-pinned or dark-OS user never flashes the
-// light "paper" background on load (notably in Safari, where the bundle paints
-// too late). CSP `script-src 'self'` allows this same-origin file but forbids
-// an inline <script>, so the logic lives here rather than in index.html.
-// Mirror of the theme resolution in src/App.tsx (useTheme).
+// Sets the theme and the colour scheme before the first paint; mirrors
+// src/lib/useTheme.ts. A file, not inline: the CSP allows same-origin scripts only.
 (function () {
+  var dark = false;
+  var warm = false;
   try {
+    warm = localStorage.getItem("palette") === "warm";
     var stored = localStorage.getItem("theme");
-    var dark =
+    dark =
       stored === "dark" ||
-      (stored !== "light" &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches);
-    var root = document.documentElement;
-    root.classList.toggle("dark", dark);
-    // Also flip the UA color-scheme so native surfaces (scrollbars, the
-    // pre-CSS default background) match immediately.
-    root.style.colorScheme = dark ? "dark" : "light";
+      (stored !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   } catch (e) {
-    // localStorage/matchMedia unavailable — App's useTheme effect catches up.
+    // No storage: the classic light default stands until useTheme takes over.
   }
+  var root = document.documentElement;
+  root.classList.toggle("dark", dark);
+  root.classList.toggle("warm", warm);
+  root.style.colorScheme = dark ? "dark" : "light";
 })();

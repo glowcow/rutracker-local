@@ -37,7 +37,7 @@ export function SortControl({ value, onChange }: Props) {
               {i > 0 && (
                 <span
                   aria-hidden="true"
-                  className="h-3 w-px bg-[var(--color-rule)] dark:bg-[var(--color-dark-rule)]"
+                  className="h-3 w-px bg-[var(--color-rule)]"
                 />
               )}
               <button
@@ -59,7 +59,7 @@ export function SortControl({ value, onChange }: Props) {
                   "text-[11px] font-semibold uppercase tracking-[0.08em]",
                   active
                     ? "text-[var(--color-accent)]"
-                    : "text-[var(--color-ink)] dark:text-[var(--color-dark-ink)] hover:text-[var(--color-accent)]",
+                    : "text-[var(--color-ink)] hover:text-[var(--color-accent)]",
                 )}
               >
                 <span>{t(opt.tKey)}</span>

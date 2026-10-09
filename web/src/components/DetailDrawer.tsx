@@ -8,6 +8,7 @@ import { formatBytes, formatDate } from "../lib/format";
 import { cn } from "../lib/cn";
 import { useLang } from "../lib/i18n";
 import { FavoriteStar } from "./FavoriteStar";
+import { Collapse } from "./Collapse";
 import { FileTree } from "./FileTree";
 import { MetaLabel } from "./MetaRow";
 import { PeerStatsRow } from "./PeerStats";
@@ -206,7 +207,7 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
           eases in/out together with the dim. */}
       <div
         onClick={onClose}
-        className="swiss-drawer-backdrop fixed inset-0 z-40 bg-[var(--color-ink)]/60 backdrop-blur-xs"
+        className="swiss-drawer-backdrop fixed inset-0 z-40 bg-[var(--color-scrim)] backdrop-blur-xs"
       />
       {/* Centred modal. The outer grid handles centering at any viewport
           size; inner card has max-w + max-h so it never spans the whole
@@ -227,8 +228,8 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
             // max-w-4xl (896px) — was max-w-2xl (672px); the card read too
             // narrow on desktop. ~+33% per user request 2026-06-10.
             "w-full max-w-4xl max-h-[calc(100svh-2rem)]",
-            "bg-[var(--color-paper)] dark:bg-[var(--color-dark-paper)]",
-            "border border-[var(--color-rule)] dark:border-[var(--color-dark-rule)]",
+            "bg-[var(--color-paper)]",
+            "border border-[var(--color-rule)]",
             // overflow-hidden also clips the square header/scroll children
             // to the 8px radius.
             "rounded-lg overflow-hidden",
@@ -244,8 +245,8 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                   aria-label={t("drawer_close")}
                   className={cn(
                     "size-10 grid place-items-center -mr-2",
-                    "text-[var(--color-ink-soft)] dark:text-[var(--color-dark-ink-soft)]",
-                    "hover:text-[var(--color-ink)] dark:hover:text-[var(--color-dark-ink)]",
+                    "text-[var(--color-ink-soft)]",
+                    "hover:text-[var(--color-ink)]",
                     "transition-colors"
                   )}
                 >
@@ -255,11 +256,11 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
 
               <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 sm:py-6 space-y-5 sm:space-y-6">
                 {isLoading && (
-                  <div className="text-[14px] text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">{t("drawer_loading")}</div>
+                  <div className="text-[14px] text-[var(--color-ink-muted)]">{t("drawer_loading")}</div>
                 )}
 
                 {error && (
-                  <div className="p-4 text-[13px] border-l-2 border-red-600 bg-red-600/5 text-red-700 dark:text-red-300 rounded-md">
+                  <div className="p-4 text-[13px] border-l-2 border-[var(--color-down)] bg-[var(--color-down)]/5 text-[var(--color-ink-soft)] rounded-md">
                     {error instanceof Error ? error.message : t("drawer_load_error")}
                   </div>
                 )}
@@ -301,7 +302,7 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                         href={magnet}
                         className={cn(
                           "flex-1 basis-0 min-w-[120px] h-11 grid place-items-center rounded-md",
-                          "bg-[var(--color-accent)] text-[var(--color-ink)]",
+                          "bg-[var(--color-accent)] text-[var(--color-on-accent)]",
                           "text-[11px] font-semibold uppercase tracking-[0.08em]",
                           "hover:bg-[var(--color-accent-hover)] transition-colors"
                         )}
@@ -325,12 +326,12 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                           "text-[11px] font-semibold uppercase tracking-[0.08em]",
                           "transition-colors grid place-items-center",
                           txOffline
-                            ? "border-[var(--color-rule)] dark:border-[var(--color-dark-rule)] text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)] opacity-60 cursor-not-allowed"
+                            ? "border-[var(--color-rule)] text-[var(--color-ink-muted)] opacity-60 cursor-not-allowed"
                             : txState === "error"
-                              ? "border-red-600/60 text-red-600 dark:text-red-400"
+                              ? "border-[var(--color-down)]/60 text-[var(--color-down)]"
                               : txState === "added" || txState === "duplicate"
                                 ? "border-[var(--color-accent)] text-[var(--color-accent)]"
-                                : "border-[var(--color-rule)] dark:border-[var(--color-dark-rule)] text-[var(--color-ink)] dark:text-[var(--color-dark-ink)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                                : "border-[var(--color-rule)] text-[var(--color-ink)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
                         )}
                       >
                         <span className="flex items-center gap-2">
@@ -360,9 +361,9 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                         onClick={copyMagnet}
                         className={cn(
                           "flex-1 basis-0 min-w-[120px] h-11 rounded-md",
-                          "border border-[var(--color-rule)] dark:border-[var(--color-dark-rule)]",
+                          "border border-[var(--color-rule)]",
                           "text-[11px] font-semibold uppercase tracking-[0.08em]",
-                          "text-[var(--color-ink)] dark:text-[var(--color-dark-ink)]",
+                          "text-[var(--color-ink)]",
                           "hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]",
                           "transition-colors grid place-items-center"
                         )}
@@ -400,9 +401,9 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                         aria-label={t("drawer_topic_aria")}
                         className={cn(
                           "flex-1 basis-0 min-w-[120px] h-11 rounded-md",
-                          "border border-[var(--color-rule)] dark:border-[var(--color-dark-rule)]",
+                          "border border-[var(--color-rule)]",
                           "text-[11px] font-semibold uppercase tracking-[0.08em]",
-                          "text-[var(--color-ink)] dark:text-[var(--color-dark-ink)]",
+                          "text-[var(--color-ink)]",
                           "hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]",
                           "transition-colors flex items-center justify-center gap-2"
                         )}
@@ -432,7 +433,7 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                             {t("drawer_files")}: {data.files_count}
                           </span>
                           {files?.truncated && (
-                            <span className="normal-case tracking-normal text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
+                            <span className="normal-case tracking-normal text-[var(--color-ink-muted)]">
                               {t("drawer_files_truncated").replace(
                                 "{n}",
                                 String(files.files_count - files.files.length)
@@ -440,25 +441,23 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                             </span>
                           )}
                         </button>
-                        {filesOpen && (
-                          <div className="mt-3">
+                        <Collapse open={filesOpen} className="pt-3">
                             {filesLoading ? (
-                              <div className="text-[12.5px] text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
+                              <div className="text-[12.5px] text-[var(--color-ink-muted)]">
                                 {t("drawer_files_loading")}
                               </div>
                             ) : filesError ? (
-                              <div className="text-[12.5px] text-red-700 dark:text-red-300">
+                              <div className="text-[12.5px] text-[var(--color-down)]">
                                 {t("drawer_files_error")}
                               </div>
                             ) : files ? (
                               <FileTree files={files.files} />
                             ) : (
-                              <div className="text-[12.5px] text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
+                              <div className="text-[12.5px] text-[var(--color-ink-muted)]">
                                 {t("drawer_files_none")}
                               </div>
                             )}
-                          </div>
-                        )}
+                        </Collapse>
                       </section>
                     )}
 
@@ -469,13 +468,13 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                       <div
                         className={cn(
                           "text-[13.5px] leading-relaxed",
-                          "text-[var(--color-ink-soft)] dark:text-[var(--color-dark-ink-soft)]",
-                          "[&_strong]:font-semibold [&_strong]:text-[var(--color-ink)] dark:[&_strong]:text-[var(--color-dark-ink)]",
+                          "text-[var(--color-ink-soft)]",
+                          "[&_strong]:font-semibold [&_strong]:text-[var(--color-ink)]",
                           "[&_a]:text-[var(--color-accent)] [&_a]:underline [&_a]:underline-offset-2",
-                          "[&_pre]:font-mono [&_pre]:text-[12px] [&_pre]:bg-[var(--color-paper-soft)] dark:[&_pre]:bg-[var(--color-dark-paper-soft)] [&_pre]:p-3 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-md",
-                          "[&_blockquote]:border-l-2 [&_blockquote]:border-[var(--color-accent)] [&_blockquote]:pl-3 [&_blockquote]:my-3 [&_blockquote]:text-[var(--color-ink-muted)] dark:[&_blockquote]:text-[var(--color-dark-ink-muted)]",
+                          "[&_pre]:font-mono [&_pre]:text-[12px] [&_pre]:bg-[var(--color-paper-soft)] [&_pre]:p-3 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-md",
+                          "[&_blockquote]:border-l-2 [&_blockquote]:border-[var(--color-accent)] [&_blockquote]:pl-3 [&_blockquote]:my-3 [&_blockquote]:text-[var(--color-ink-muted)]",
                           "[&_blockquote_cite]:block [&_blockquote_cite]:text-[11px] [&_blockquote_cite]:text-[var(--color-accent)] [&_blockquote_cite]:mb-1",
-                          "[&_details]:my-3 [&_details]:p-3 [&_details]:bg-[var(--color-paper-soft)] dark:[&_details]:bg-[var(--color-dark-paper-soft)] [&_details]:rounded-md",
+                          "[&_details]:my-3 [&_details]:p-3 [&_details]:bg-[var(--color-paper-soft)] [&_details]:rounded-md",
                           "[&_summary]:cursor-pointer [&_summary]:font-medium [&_summary]:text-[12.5px]",
                           "[&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2",
                           "[&_li]:my-1"
@@ -531,7 +530,7 @@ function Row({
 }) {
   const valueClass = cn(
     // leading-5 matches MetaLabel's h-5, so label and value sit on one line.
-    "block leading-5 text-[var(--color-ink)] dark:text-[var(--color-dark-ink)] break-all",
+    "block leading-5 text-[var(--color-ink)] break-all",
     mono && "tabular-nums",
     small && "text-[11.5px] font-mono"
   );

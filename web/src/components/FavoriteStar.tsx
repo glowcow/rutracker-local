@@ -44,12 +44,12 @@ export function FavoriteStar({ torrent, size = "card" }: Props) {
         "shrink-0 grid place-items-center transition-colors",
         btnSize,
         isDrawer && [
-          "rounded-md border border-[var(--color-rule)] dark:border-[var(--color-dark-rule)]",
+          "rounded-md border border-[var(--color-rule)]",
           "hover:border-[var(--color-accent)]",
         ],
         active
           ? "text-[var(--color-accent)]"
-          : "text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)] hover:text-[var(--color-accent)]",
+          : "text-[var(--color-ink-muted)] hover:text-[var(--color-accent)]",
       )}
     >
       {/* key={pulse} remounts the span per click so the CSS pulse replays;

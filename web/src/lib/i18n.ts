@@ -5,8 +5,17 @@ import { createContext, useContext } from "react";
 export type Dict = {
   search_placeholder: string;
   search_clear_aria: string;
-  theme_toggle_aria: string;
-  lang_toggle_aria: string;
+
+  settings: string;
+  theme: string;
+  theme_system: string;
+  theme_light: string;
+  theme_dark: string;
+  palette: string;
+  palette_classic: string;
+  palette_warm: string;
+  language: string;
+  cancel: string;
 
   sort_label: string;
   sort_relevance: string;
@@ -129,14 +138,23 @@ export type Dict = {
 };
 
 // Pluralisation helpers. "results" / "torrents" / "forums" each get a verb
-// form chosen by Intl.PluralRules; ru-RU has one/few/many, en-US has one/other.
+// form chosen by Intl.PluralRules; Russian has one/few/many, English one/other.
 export type PluralForms = { one: string; few?: string; many?: string; other: string };
 
 const ru: Dict = {
   search_placeholder: "Найти раздачу…",
   search_clear_aria: "Очистить поиск",
-  theme_toggle_aria: "Переключить тему",
-  lang_toggle_aria: "Переключить язык",
+
+  settings: "Настройки",
+  theme: "Тема",
+  theme_system: "Системная",
+  theme_light: "Светлая",
+  theme_dark: "Тёмная",
+  palette: "Цветовая схема",
+  palette_classic: "Классическая",
+  palette_warm: "Тёплая",
+  language: "Язык",
+  cancel: "Отмена",
 
   sort_label: "Сортировка",
   sort_relevance: "Релевантность",
@@ -197,7 +215,7 @@ const ru: Dict = {
   favorites_empty_title: "Здесь будет твоё избранное",
   favorites_empty_hint: "Нажми звёздочку на любой раздаче, чтобы добавить.",
   favorites_clear_all: "Очистить избранное",
-  favorites_clear_confirm: "Убрать все раздачи из избранного?",
+  favorites_clear_confirm: "Все раздачи будут убраны из избранного. Отменить это нельзя.",
 
   pagination_aria: "Постраничная навигация",
   pagination_prev: "Предыдущая страница",
@@ -260,8 +278,17 @@ const ru: Dict = {
 const en: Dict = {
   search_placeholder: "Find a torrent…",
   search_clear_aria: "Clear search",
-  theme_toggle_aria: "Toggle theme",
-  lang_toggle_aria: "Toggle language",
+
+  settings: "Settings",
+  theme: "Theme",
+  theme_system: "System",
+  theme_light: "Light",
+  theme_dark: "Dark",
+  palette: "Colour scheme",
+  palette_classic: "Classic",
+  palette_warm: "Warm",
+  language: "Language",
+  cancel: "Cancel",
 
   sort_label: "Sort",
   sort_relevance: "Relevance",
@@ -316,14 +343,14 @@ const en: Dict = {
   forums_show: "Show forums",
   forums_hide: "Hide forums",
 
-  favorites_toggle_aria: "Favorites",
-  favorites_add_aria: "Add to favorites",
-  favorites_remove_aria: "Remove from favorites",
-  favorites_title: "Favorites",
-  favorites_empty_title: "Your favorites will live here",
+  favorites_toggle_aria: "Favourites",
+  favorites_add_aria: "Add to favourites",
+  favorites_remove_aria: "Remove from favourites",
+  favorites_title: "Favourites",
+  favorites_empty_title: "Your favourites will live here",
   favorites_empty_hint: "Tap the star on any torrent to add it.",
-  favorites_clear_all: "Clear favorites",
-  favorites_clear_confirm: "Remove all favorites?",
+  favorites_clear_all: "Clear favourites",
+  favorites_clear_confirm: "Every torrent leaves the favourites. This cannot be undone.",
 
   pagination_aria: "Pagination",
   pagination_prev: "Previous page",
@@ -383,9 +410,18 @@ const en: Dict = {
   stats_dump_updated: "Dump updated",
 };
 
-export const dicts = { ru, en };
+export const dicts = { en, ru };
 
-export type Lang = "ru" | "en";
+export type Lang = "en" | "ru";
+
+/** Each language in its own name, in menu order. */
+export const LANGS: { id: Lang; name: string }[] = [
+  { id: "en", name: "English" },
+  { id: "ru", name: "Русский" },
+];
+
+/** What numbers and dates are formatted for. */
+export const LOCALE: Record<Lang, string> = { en: "en-GB", ru: "ru-RU" };
 
 export const plural: Record<Lang, Record<string, PluralForms>> = {
   ru: {
@@ -404,6 +440,8 @@ export type Ctx = {
   lang: Lang;
   setLang: (l: Lang) => void;
   t: (k: keyof Dict) => string;
+  /** What numbers and dates are formatted for. */
+  locale: string;
   // Returns the noun form for `count` in the current language. The `key`
   // selects which noun ("torrents", "results", "forums"). Use with EXACT
   // displayed counts — Intl.PluralRules picks by the trailing digits.
@@ -421,12 +459,15 @@ export const LangCtx = createContext<Ctx | null>(null);
 
 export const STORAGE_KEY = "lang";
 
+/** Stored choice, else the browser's language when the app has it, else English. */
 export function detectInitialLang(): Lang {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "ru" || stored === "en") return stored;
-  // Project is RU-first; only switch to EN if the browser locale strongly
-  // suggests it. Anything non-en goes back to ru.
-  return navigator.language?.toLowerCase().startsWith("en") ? "en" : "ru";
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === "en" || stored === "ru") return stored;
+  } catch {
+    // No storage: fall through to the browser's language.
+  }
+  return navigator.language.toLowerCase().startsWith("ru") ? "ru" : "en";
 }
 
 export function useLang(): Ctx {

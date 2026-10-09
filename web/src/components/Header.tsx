@@ -1,14 +1,16 @@
-import { Search, Sun, Moon, X, Star, Database } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Search, X, Star, Database } from "lucide-react";
 import { cn } from "../lib/cn";
 import { useLang } from "../lib/i18n";
 import { useFavorites } from "../lib/favorites";
+import { SettingsMenu } from "./SettingsMenu";
 import { Tooltip } from "./Tooltip";
 
 type Props = {
   // App measures the header to place the sticky meta-row under it.
   ref?: React.Ref<HTMLElement>;
-  theme: "light" | "dark";
-  onToggleTheme: () => void;
+  // False while a sticky bar below the header does the frosting instead.
+  frost: boolean;
   query: string;
   onQueryChange: (v: string) => void;
   onReset: () => void;
@@ -17,14 +19,10 @@ type Props = {
   onOpenAdmin: () => void;
 };
 
-// Swiss header — flat ground, one hairline rule along the bottom. No
-// glass/blur. Brand is a small wordmark left, search is a flat filled input
-// in the centre column (subtle 6px radius, no pill), controls are
-// text-buttons on the right with caps tracking instead of icon-only pills.
+// The wordmark, the search field, then favourites, the parser panel and the gear.
 export function Header({
   ref,
-  theme,
-  onToggleTheme,
+  frost,
   query,
   onQueryChange,
   onReset,
@@ -32,26 +30,44 @@ export function Header({
   onToggleFavOnly,
   onOpenAdmin,
 }: Props) {
-  const { lang, setLang, t } = useLang();
+  const { t } = useLang();
   const { count: favCount } = useFavorites();
 
+  // Stuck is read off a zero-height sentinel above the bar, not a scroll
+  // listener; the 1px margin keeps it inside the viewport at rest.
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const [isStuck, setIsStuck] = useState(false);
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => setIsStuck(!entry.isIntersecting),
+      { rootMargin: "1px 0px 0px 0px", threshold: 0 },
+    );
+    obs.observe(node);
+    return () => obs.disconnect();
+  }, []);
+
   return (
-    // Outer <header> = full-bleed paper bg (sticky bar covers the viewport edge
-    // to edge); inner container is max-w + <main>'s padding so wordmark/search
-    // and the hairline align with the content rules. Hairline on the inner
-    // container so it sits inside the type column, not edge-to-edge.
+    <>
+    <div ref={sentinelRef} aria-hidden="true" className="h-0 w-full" />
+    {/* Full-bleed ground; the inner container carries the hairline, so the
+        rule ends where the text does. */}
     <header
       ref={ref}
       className={cn(
-        "sticky top-0 z-30",
-        "bg-[var(--color-paper)] dark:bg-[var(--color-dark-paper)]",
-        "pt-[env(safe-area-inset-top)]",
+        "sticky top-0 z-30 pt-[env(safe-area-inset-top)]",
+        "transition-[background-color,box-shadow,backdrop-filter] duration-300 ease-out",
+        // Frosted only while the page is under it.
+        frost && isStuck
+          ? "bg-[var(--color-paper)]/85 backdrop-blur-xs shadow-[var(--shadow-header)]"
+          : "bg-[var(--color-paper)]",
       )}
     >
       <div
         className={cn(
           "mx-auto max-w-[1400px] swiss-rule",
-          "px-6 sm:px-10 lg:px-16",
           "pl-[max(1.5rem,env(safe-area-inset-left))]",
           "pr-[max(1.5rem,env(safe-area-inset-right))]",
           "sm:pl-[max(2.5rem,env(safe-area-inset-left))]",
@@ -64,7 +80,7 @@ export function Header({
           "flex flex-wrap sm:flex-nowrap lg:grid lg:grid-cols-[1fr_auto_1fr]",
         )}
       >
-        {/* Brand wordmark — flat text, no logo box. Click resets state. */}
+        {/* The wordmark resets the page. */}
         <button
           type="button"
           onClick={onReset}
@@ -75,28 +91,25 @@ export function Header({
           </span>
         </button>
 
-        {/* Search input — flat paper-soft fill, no border (the previous
-            underline doubled awkwardly with the header's own bottom rule).
-            Focus state lifts a 2px accent bar on the LEFT edge: subtle but
-            unambiguous, fits the Swiss vocab. */}
+        {/* The field shows focus itself: a 2px accent bar on its left edge. */}
         <div className="order-3 sm:order-none basis-full sm:basis-auto flex-1 min-w-0 lg:flex-none lg:w-[42rem] lg:max-w-full">
           <div
             className={cn(
               "group relative flex items-center gap-2 h-9 px-3 rounded-md",
-              "bg-[var(--color-paper-soft)] dark:bg-[var(--color-dark-paper-soft)]",
+              "bg-[var(--color-paper-soft)]",
               "border-l-2 border-transparent",
               "focus-within:border-[var(--color-accent)]",
               "transition-colors duration-150",
             )}
           >
-            <Search className="size-4 text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)] shrink-0" />
+            <Search className="size-4 text-[var(--color-ink-muted)] shrink-0" />
             <input
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
               placeholder={t("search_placeholder")}
               name="search"
               autoComplete="off"
-              className="flex-1 min-w-0 bg-transparent outline-none placeholder:text-[var(--color-ink-muted)] dark:placeholder:text-[var(--color-dark-ink-muted)] text-[14px]"
+              className="flex-1 min-w-0 bg-transparent outline-none placeholder:text-[var(--color-ink-muted)] text-[14px]"
             />
             {query && (
               <button
@@ -105,8 +118,8 @@ export function Header({
                 aria-label={t("search_clear_aria")}
                 className={cn(
                   "size-6 grid place-items-center shrink-0",
-                  "text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]",
-                  "hover:text-[var(--color-ink)] dark:hover:text-[var(--color-dark-ink)]",
+                  "text-[var(--color-ink-muted)]",
+                  "hover:text-[var(--color-ink)]",
                   "transition-colors",
                 )}
               >
@@ -116,8 +129,6 @@ export function Header({
           </div>
         </div>
 
-        {/* Right rail — text controls with caps tracking, separated by
-            vertical hairlines. No pill / chip backgrounds. */}
         <div className="order-2 sm:order-none ml-auto sm:ml-0 flex items-center shrink-0 lg:justify-self-end">
           <HeaderButton
             onClick={onToggleFavOnly}
@@ -133,31 +144,9 @@ export function Header({
               {t("favorites_title")}
             </span>
             {favCount > 0 && (
-              <span className="tabular-nums text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)] ml-0.5">
+              <span className="tabular-nums text-[var(--color-ink-muted)] ml-0.5">
                 {favCount > 99 ? "99+" : favCount}
               </span>
-            )}
-          </HeaderButton>
-
-          <VRule />
-
-          <HeaderButton
-            onClick={() => setLang(lang === "ru" ? "en" : "ru")}
-            ariaLabel={t("lang_toggle_aria")}
-          >
-            <span className="tabular-nums">{lang === "ru" ? "RU" : "EN"}</span>
-          </HeaderButton>
-
-          <VRule />
-
-          <HeaderButton
-            onClick={onToggleTheme}
-            ariaLabel={t("theme_toggle_aria")}
-          >
-            {theme === "dark" ? (
-              <Sun className="size-3.5" />
-            ) : (
-              <Moon className="size-3.5" />
             )}
           </HeaderButton>
 
@@ -169,9 +158,14 @@ export function Header({
           >
             <Database className="size-3.5" strokeWidth={2} />
           </HeaderButton>
+
+          {/* The rule stands 12/16px before the gear's icon, as before a text button. */}
+          <span aria-hidden="true" className="h-4 w-px mr-3 sm:mr-4 bg-[var(--color-rule)]" />
+          <SettingsMenu />
         </div>
       </div>
     </header>
+    </>
   );
 }
 
@@ -196,10 +190,10 @@ function HeaderButton({
       className={cn(
         "flex items-center gap-1.5 h-10 px-3 sm:px-4",
         "text-[11px] font-semibold uppercase tracking-[0.08em]",
-        "text-[var(--color-ink-soft)] dark:text-[var(--color-dark-ink-soft)]",
-        "hover:text-[var(--color-ink)] dark:hover:text-[var(--color-dark-ink)]",
-        pressed && "text-[var(--color-accent)] dark:text-[var(--color-accent)]",
-        "transition-colors",
+        "text-[var(--color-ink-soft)]",
+        "hover:text-[var(--color-ink)]",
+        pressed && "text-[var(--color-accent)] hover:text-[var(--color-accent)]",
+        "transition-colors duration-150",
       )}
     >
       {children}
@@ -212,7 +206,7 @@ function VRule() {
   return (
     <span
       aria-hidden="true"
-      className="h-4 w-px bg-[var(--color-rule)] dark:bg-[var(--color-dark-rule)]"
+      className="h-4 w-px bg-[var(--color-rule)]"
     />
   );
 }

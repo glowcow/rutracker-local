@@ -8,6 +8,7 @@ import { SortControl, type Sort } from "./components/SortControl";
 import { ResultCard } from "./components/ResultCard";
 import { DetailDrawer } from "./components/DetailDrawer";
 import { AdminPanel } from "./components/AdminPanel";
+import { ConfirmDialog } from "./components/ConfirmDialog";
 import { Pagination } from "./components/Pagination";
 import { Footer } from "./components/Footer";
 import { getForums, getStats, searchTorrents } from "./lib/api";
@@ -27,54 +28,8 @@ function leafName(name: string): string {
   return parts[parts.length - 1].trim();
 }
 
-function useTheme() {
-  // Tri-state: explicit pins are persisted, "system" means follow the OS.
-  // Previous version persisted the initial system value to localStorage,
-  // which silently froze the choice and stopped tracking OS changes — the
-  // user noticed this. Now nothing is written until the toggle is pressed.
-  const [choice, setChoice] = useState<"light" | "dark" | "system">(() => {
-    const stored = localStorage.getItem("theme");
-    return stored === "light" || stored === "dark" ? stored : "system";
-  });
-
-  const [systemDark, setSystemDark] = useState(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-  );
-
-  useEffect(() => {
-    const mql = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, []);
-
-  const theme: "light" | "dark" =
-    choice === "system" ? (systemDark ? "dark" : "light") : choice;
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
-  }, [theme]);
-
-  const toggle = () => {
-    const next = theme === "dark" ? "light" : "dark";
-    // If the new pick equals the current system preference, drop back to
-    // "system" mode so the OS keeps controlling the theme. Net effect: two
-    // clicks in a row return the user to auto-follow.
-    if (next === (systemDark ? "dark" : "light")) {
-      setChoice("system");
-      localStorage.removeItem("theme");
-    } else {
-      setChoice(next);
-      localStorage.setItem("theme", next);
-    }
-  };
-
-  return { theme, toggle };
-}
-
 function App() {
-  const { theme, toggle } = useTheme();
-  const { t, p } = useLang();
+  const { t, p, locale } = useLang();
   const { items: favItems, count: favCount, clear: clearFavs } = useFavorites();
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounced(query, 300);
@@ -101,6 +56,8 @@ function App() {
   // for chip expansion stays in the strip; this is just a fold-up signal.
   const [forumsResetKey, setForumsResetKey] = useState(0);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const closeConfirm = useCallback(() => setConfirmClear(false), []);
 
   // Any filter change resets the cursor (staying on page 17 after picking a
   // forum would land on a phantom page). Reset is folded into the setters, not
@@ -297,8 +254,7 @@ function App() {
     <div className="min-h-svh flex flex-col">
       <Header
         ref={headerRef}
-        theme={theme}
-        onToggleTheme={toggle}
+        frost={!showResults}
         query={query}
         onQueryChange={setQueryReset}
         favOnly={favOnly}
@@ -371,7 +327,7 @@ function App() {
                 // dropped when stuck under the header (header's own bottom
                 // rule provides that edge, otherwise the two 1px lines
                 // would stack into a visibly thicker line).
-                "border-[var(--color-rule)] dark:border-[var(--color-dark-rule)]",
+                "border-[var(--color-rule)]",
                 "border-x border-b border-t",
                 // Docking animates: radius/border/bg/shadow tween 300 ms instead
                 // of snapping. Top border is always present but fades transparent
@@ -380,15 +336,15 @@ function App() {
                 // Top corners soft only while floating; flush/square when stuck.
                 // Bottom square while the list continues below (its last card
                 // rounds it) — but a zero-row meta is standalone and closes itself.
-                isStuck ? "border-t-transparent dark:border-t-transparent rounded-t-none" : "rounded-t-md",
+                isStuck ? "border-t-transparent rounded-t-none" : "rounded-t-md",
                 items.length === 0 && "rounded-b-md",
                 "top-[calc(env(safe-area-inset-top)+var(--header-h))]",
                 // Stuck: near-opaque frosted bg — the list scrolling away
                 // beneath shows through faintly blurred — plus a soft drop
                 // shadow so the row reads as floating above the rows.
                 isStuck
-                  ? "bg-[var(--color-paper)]/85 dark:bg-[var(--color-dark-paper)]/85 backdrop-blur-xs shadow-[0_12px_26px_-14px_rgba(20,20,20,0.25)] dark:shadow-[0_12px_26px_-14px_rgba(0,0,0,0.38)]"
-                  : "bg-[var(--color-paper)] dark:bg-[var(--color-dark-paper)]",
+                  ? "bg-[var(--color-paper)]/85 backdrop-blur-xs shadow-[var(--shadow-header)]"
+                  : "bg-[var(--color-paper)]",
               )}
             >
               {/* Below lg the row stacks into counts / controls, split by an
@@ -398,30 +354,30 @@ function App() {
                   into two rows with no divider between them. */}
               <div className="flex flex-col lg:flex-row lg:items-center lg:flex-nowrap gap-x-3 py-3 px-3 sm:px-4">
                 <div className="flex items-center flex-nowrap gap-x-3 pb-2.5 lg:pb-0 lg:contents">
-                <p className="text-[12px] text-[var(--color-ink-soft)] dark:text-[var(--color-dark-ink-soft)] shrink-0 tabular-nums">
+                <p className="text-[12px] text-[var(--color-ink-soft)] shrink-0 tabular-nums">
                   {isFavView ? (
                     <>
                       <span className="swiss-eyebrow text-[var(--color-accent)] mr-2">
                         {t("favorites_title")}
                       </span>
-                      <span className="text-[var(--color-rule)] dark:text-[var(--color-dark-rule)] mr-2">/</span>
-                      <span className="font-medium text-[var(--color-ink)] dark:text-[var(--color-dark-ink)]">
-                        {total.toLocaleString()}
+                      <span className="text-[var(--color-rule)] mr-2">/</span>
+                      <span className="font-medium text-[var(--color-ink)]">
+                        {total.toLocaleString(locale)}
                       </span>{" "}
                       {p("results", total)}
                       {total > 0 && (
                         <>
-                          <span className="text-[var(--color-rule)] dark:text-[var(--color-dark-rule)] mx-2">/</span>
-                          <span className="font-medium text-[var(--color-ink)] dark:text-[var(--color-dark-ink)]">
-                            {(effPage * PAGE_SIZE + 1).toLocaleString()}–
-                            {Math.min((effPage + 1) * PAGE_SIZE, total).toLocaleString()}
+                          <span className="text-[var(--color-rule)] mx-2">/</span>
+                          <span className="font-medium text-[var(--color-ink)]">
+                            {(effPage * PAGE_SIZE + 1).toLocaleString(locale)}–
+                            {Math.min((effPage + 1) * PAGE_SIZE, total).toLocaleString(locale)}
                           </span>
                           {/* Page counter is dropped below lg — the pagination
                               control at the bottom of the list repeats it. */}
                           <span className="hidden lg:inline">
-                            <span className="text-[var(--color-rule)] dark:text-[var(--color-dark-rule)] mx-2">/</span>
+                            <span className="text-[var(--color-rule)] mx-2">/</span>
                             {t("pagination_page")}{" "}
-                            <span className="font-medium text-[var(--color-ink)] dark:text-[var(--color-dark-ink)]">
+                            <span className="font-medium text-[var(--color-ink)]">
                               {effPage + 1}/{Math.max(1, Math.ceil(total / PAGE_SIZE))}
                             </span>
                           </span>
@@ -432,23 +388,23 @@ function App() {
                     t("searching")
                   ) : (
                     <>
-                      <span className="font-medium text-[var(--color-ink)] dark:text-[var(--color-dark-ink)]">
-                        {total.toLocaleString()}
+                      <span className="font-medium text-[var(--color-ink)]">
+                        {total.toLocaleString(locale)}
                       </span>{" "}
                       {p("results", total)}
                       {total > 0 && (
                         <>
-                          <span className="text-[var(--color-rule)] dark:text-[var(--color-dark-rule)] mx-2">/</span>
-                          <span className="font-medium text-[var(--color-ink)] dark:text-[var(--color-dark-ink)]">
-                            {(effPage * PAGE_SIZE + 1).toLocaleString()}–
-                            {Math.min((effPage + 1) * PAGE_SIZE, total).toLocaleString()}
+                          <span className="text-[var(--color-rule)] mx-2">/</span>
+                          <span className="font-medium text-[var(--color-ink)]">
+                            {(effPage * PAGE_SIZE + 1).toLocaleString(locale)}–
+                            {Math.min((effPage + 1) * PAGE_SIZE, total).toLocaleString(locale)}
                           </span>
                           {/* Page counter is dropped below lg — the pagination
                               control at the bottom of the list repeats it. */}
                           <span className="hidden lg:inline">
-                            <span className="text-[var(--color-rule)] dark:text-[var(--color-dark-rule)] mx-2">/</span>
+                            <span className="text-[var(--color-rule)] mx-2">/</span>
                             {t("pagination_page")}{" "}
-                            <span className="font-medium text-[var(--color-ink)] dark:text-[var(--color-dark-ink)]">
+                            <span className="font-medium text-[var(--color-ink)]">
                               {effPage + 1}/{Math.max(1, Math.ceil(total / PAGE_SIZE))}
                             </span>
                           </span>
@@ -459,7 +415,7 @@ function App() {
                 </p>
                 {!isFavView && chips.length > 0 && (
                   <>
-                    <span className="text-[var(--color-rule)] dark:text-[var(--color-dark-rule)] text-[14px] shrink-0">
+                    <span className="text-[var(--color-rule)] text-[14px] shrink-0">
                       /
                     </span>
                     {/* lg:flex-initial, not flex-none: the chip takes its
@@ -481,7 +437,7 @@ function App() {
                     chip's px-3 keeps it clear of the chip's own outline. */}
                 <div
                   aria-hidden="true"
-                  className="h-px mx-2 mb-2.5 bg-[var(--color-rule)] dark:bg-[var(--color-dark-rule)] lg:hidden"
+                  className="h-px mx-2 mb-2.5 bg-[var(--color-rule)] lg:hidden"
                 />
                 <div className="flex items-center gap-3 flex-nowrap shrink-0 lg:ml-auto">
                   <SortControl value={sort} onChange={setSort} />
@@ -489,24 +445,13 @@ function App() {
                     <>
                       <span
                         aria-hidden="true"
-                        className="h-4 w-px bg-[var(--color-rule)] dark:bg-[var(--color-dark-rule)]"
+                        className="h-4 w-px bg-[var(--color-rule)]"
                       />
                       <button
                         type="button"
-                        onClick={() => {
-                          if (window.confirm(t("favorites_clear_confirm"))) {
-                            clearFavs();
-                            setPage(0);
-                          }
-                        }}
+                        onClick={() => setConfirmClear(true)}
                         aria-label={t("favorites_clear_all")}
-                        title={t("favorites_clear_all")}
-                        className={cn(
-                          "swiss-eyebrow",
-                          "text-[var(--color-ink-soft)] dark:text-[var(--color-dark-ink-soft)]",
-                          "hover:text-red-700 dark:hover:text-red-400",
-                          "transition-colors",
-                        )}
+                        className="swiss-eyebrow hover:text-[var(--color-accent)] transition-colors duration-150"
                       >
                         {/* Icon-only below lg: the Russian label is 131px and
                             would not fit next to the sort options. */}
@@ -522,7 +467,7 @@ function App() {
         )}
 
         {error && (
-          <div className="my-4 p-4 text-[13px] border-l-2 border-red-600 bg-red-600/5 text-red-700 dark:text-red-300 rounded-md">
+          <div className="my-4 p-4 text-[13px] border-l-2 border-[var(--color-down)] bg-[var(--color-down)]/5 text-[var(--color-ink-soft)] rounded-md">
             {t("error_prefix")}
             {error instanceof Error ? error.message : t("error_generic")}
           </div>
@@ -553,7 +498,7 @@ function App() {
                 <EmptyFavorites />
               )}
               {!isFavView && !isFetching && items.length === 0 && !error && (
-                <div className="py-12 text-center text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)] text-[14px]">
+                <div className="py-12 text-center text-[var(--color-ink-muted)] text-[14px]">
                   {t("no_results")}
                 </div>
               )}
@@ -579,6 +524,18 @@ function App() {
 
       <AdminPanel open={adminOpen} onClose={() => setAdminOpen(false)} />
 
+      <ConfirmDialog
+        open={confirmClear}
+        title={t("favorites_clear_all")}
+        body={t("favorites_clear_confirm")}
+        confirmLabel={t("favorites_clear_all")}
+        onConfirm={() => {
+          clearFavs();
+          setPage(0);
+        }}
+        onClose={closeConfirm}
+      />
+
       <Footer />
     </div>
   );
@@ -594,7 +551,7 @@ function EmptyState() {
         <Search className="size-3.5" strokeWidth={2.25} />
         <span>{t("empty_title")}</span>
       </div>
-      <p className="text-[14px] text-[var(--color-ink-soft)] dark:text-[var(--color-dark-ink-soft)] leading-relaxed">
+      <p className="text-[14px] text-[var(--color-ink-soft)] leading-relaxed">
         {t("empty_hint")}
       </p>
     </div>
@@ -609,7 +566,7 @@ function EmptyFavorites() {
         <Star className="size-3.5" strokeWidth={2.25} fill="currentColor" />
         <span>{t("favorites_empty_title")}</span>
       </div>
-      <p className="text-[14px] text-[var(--color-ink-soft)] dark:text-[var(--color-dark-ink-soft)] leading-relaxed">
+      <p className="text-[14px] text-[var(--color-ink-soft)] leading-relaxed">
         {t("favorites_empty_hint")}
       </p>
     </div>

@@ -61,10 +61,10 @@ export const ResultCard = memo(function ResultCard({
         // Resting tone alternates for the zebra. Hover/focus is the same
         // accent tint regardless of phase — visible against both paper and
         // paper-soft, matches the accent-colored hover used everywhere else.
-        zebra && "bg-[var(--color-paper-soft)] dark:bg-[var(--color-dark-paper-soft)]",
+        zebra && "bg-[var(--color-paper-soft)]",
         last && "rounded-b-md",
-        "hover:bg-accent/10 dark:hover:bg-accent/15",
-        "focus-visible:outline-none focus-visible:bg-accent/15 dark:focus-visible:bg-accent/20",
+        "hover:bg-[var(--color-row-hover)]",
+        "focus-visible:outline-none focus-visible:bg-[var(--color-row-hover)]",
       )}
     >
       {/* px inset so the title/size/date don't touch the rule's left/right
@@ -92,10 +92,10 @@ export const ResultCard = memo(function ResultCard({
 
         {/* Right rail: star (compact) + size (top) + date (bottom).
             Tabular nums, right-aligned. */}
-        <div className="shrink-0 flex flex-col items-end gap-1 text-[12px] text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)] tabular-nums">
+        <div className="shrink-0 flex flex-col items-end gap-1 text-[12px] text-[var(--color-ink-muted)] tabular-nums">
           <div className="flex items-center gap-2">
             <FavoriteStar torrent={torrent} />
-            <span className="text-[var(--color-ink)] dark:text-[var(--color-dark-ink)] whitespace-nowrap font-medium">
+            <span className="text-[var(--color-ink)] whitespace-nowrap font-medium">
               {formatBytes(torrent.size_bytes)}
             </span>
           </div>
@@ -137,7 +137,7 @@ function ForumValue({
       onClick={onClick}
       className={cn(
         "flex items-baseline gap-2 min-w-0 max-w-full self-start",
-        "text-[12px] text-[var(--color-ink-soft)] dark:text-[var(--color-dark-ink-soft)]",
+        "text-[12px] text-[var(--color-ink-soft)]",
         "hover:text-[var(--color-accent)] transition-colors",
       )}
     >

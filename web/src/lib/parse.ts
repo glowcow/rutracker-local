@@ -1,3 +1,5 @@
+import { getJSON, send } from "./api";
+
 // Admin parse — client types + API calls for the in-app dump loader. Read
 // endpoints are open on the LAN; POST /api/admin/parse needs the bearer token
 // (per-browser localStorage). Types mirror the backend JSON (snake_case).
@@ -63,19 +65,13 @@ export const setToken = (v: string): void => localStorage.setItem(TOKEN_KEY, v);
 export const clearToken = (): void => localStorage.removeItem(TOKEN_KEY);
 
 // ── Read API (open) ──
-async function apiGet<T>(path: string): Promise<T> {
-  const r = await fetch(path);
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json() as Promise<T>;
-}
-
-export const listDumps = () => apiGet<{ items: DumpFile[] }>("/api/admin/dumps");
+export const listDumps = () => getJSON<{ items: DumpFile[] }>("/api/admin/dumps");
 
 export const getRecentRuns = (limit = 3) =>
-  apiGet<{ items: RunSummary[] }>(`/api/admin/parse/runs?limit=${limit}`);
+  getJSON<{ items: RunSummary[] }>(`/api/admin/parse/runs?limit=${limit}`);
 
 export type StatusResp = { running: boolean; run: RunSummary | null };
-export const getStatus = () => apiGet<StatusResp>("/api/admin/parse/status");
+export const getStatus = () => getJSON<StatusResp>("/api/admin/parse/status");
 
 // ── Write API (bearer token) ──
 export type StartOpts = { source: string; batch_size: number; sweep: boolean };
@@ -84,7 +80,7 @@ export type StartOpts = { source: string; batch_size: number; sweep: boolean };
 // is one of "conflict" | "unauthorized" | "disabled" | "http" — the component
 // maps that to a localized message.
 export async function startParse(opts: StartOpts, token: string): Promise<void> {
-  const r = await fetch("/api/admin/parse", {
+  const r = await send("/api/admin/parse", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(opts),

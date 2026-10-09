@@ -6,31 +6,45 @@ The code is developed in a private GitLab project; this repository is its public
 
 ## Contents
 
+- [Features](#features)
 - [Stack](#stack)
 - [Quick start (Docker)](#quick-start-docker)
-- [Security model](#security-model)
-- [Local development](#local-development)
 - [Configuration](#configuration)
-  - [Live seeders/leechers](#live-seedersleechers-off-by-default)
-  - [Send to Transmission](#send-to-transmission-optional)
+  - [Live seeders/leechers (off by default)](#live-seedersleechers-off-by-default)
+  - [Send to Transmission (optional)](#send-to-transmission-optional)
 - [API](#api)
-- [Backend components](#backend-components)
+- [How it works](#how-it-works)
 - [Project layout](#project-layout)
+- [Local development](#local-development)
 - [Operations](#operations)
   - [Loading a dump](#loading-a-dump)
   - [Reclaim Postgres bloat (one-shot VACUUM FULL)](#reclaim-postgres-bloat-one-shot-vacuum-full)
 - [Releases](#releases)
+- [Security model](#security-model)
 - [Disclaimer](#disclaimer)
 - [License](#license)
 
+## Features
+
+- Full-text search over titles and forum names (Postgres `tsvector`, Russian config), sorted by relevance, date or size, 25 a page.
+- The forum tree as a three-level filter, with torrent counts.
+- A torrent's page: description rendered from BBCode, the file tree from the dump, a magnet link, a link to the topic.
+- Favourites, shared by everyone who can reach the app.
+- An in-app Parser panel that loads a dump and streams its progress and log.
+- Optional: send a torrent to a Transmission daemon; live seeders and leechers (off by default).
+- English and Russian UI, light and dark themes, two colour schemes — picked in the settings menu behind the gear.
+
 ## Stack
 
-- **Backend:** Go 1.26, [pgx/v5](https://github.com/jackc/pgx), [goose](https://github.com/pressly/goose) migrations (advisory-lock-serialised at boot), structured logs via `log/slog`, Prometheus metrics at `/metrics`. HTTP layer ships its own gzip middleware, CSP/security headers, a cross-origin guard on mutations, dump-version ETags and a 10 s deadline on `/api/*`.
-- **DB:** PostgreSQL 17 with a `tsvector` (russian config) GIN index for full-text search.
-- **Parser:** Streams a `.xml.xz` dump through `xz -dc --threads=4` (native binary), decodes with `encoding/xml`, ingests via 4 worker goroutines that `COPY` rows into a per-session `TEMP` table then `INSERT ... SELECT ... ON CONFLICT DO UPDATE` into the live table.
-- **Frontend:** React 19 + Vite + Tailwind v4 + TanStack Query + Radix Tooltip; animations are pure CSS (keyframes, transitions, `grid-template-rows` collapses) — no animation library. Built into `web/dist/` and shipped from the Go binary via `embed.FS` — one image, one container.
+| Area | Choice |
+|---|---|
+| Backend | Go, `net/http` pattern routing, [pgx/v5](https://github.com/jackc/pgx), [goose](https://github.com/pressly/goose) migrations run at boot under an advisory lock, `log/slog`, Prometheus metrics at `/metrics` |
+| Database | PostgreSQL 17, a `tsvector` (Russian config) GIN index for full-text search |
+| Parser | `xz -dc --threads=4` (native binary) → `encoding/xml` → 4 workers that `COPY` into a session `TEMP` table, then `INSERT … SELECT … ON CONFLICT DO UPDATE` |
+| Frontend | React 19, Vite 8, Tailwind 4, TanStack Query 5, Radix Tooltip, lucide icons; animation is CSS only |
+| Delivery | The built `web/dist/` is embedded into the Go binary — one image, one container |
 
-The parser path lands a 2.78M-row dump in ~14 minutes on a Raspberry Pi-class host.
+The parser lands a 2.78M-row dump in ~14 minutes on a Raspberry Pi-class host.
 
 ## Quick start (Docker)
 
@@ -52,7 +66,7 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   api:
-    image: glowcow/rutracker:v1.8.6   # pick a published version — no :latest tag
+    image: glowcow/rutracker:v1.9.0   # pick a published version — no :latest tag
     depends_on: [postgres]
     environment:
       POSTGRES_HOST:     postgres
@@ -71,47 +85,6 @@ volumes:
 ```
 
 Then open `http://localhost:8080`, click the database icon in the header, paste the admin token, pick the dump and start a parse with **sweep** on — see [Loading a dump](#loading-a-dump). A full dump lands in ~15 minutes.
-
-## Security model
-
-The app is built for a trusted home network and has **no user accounts**. Only starting a parse is gated (by `RT_ADMIN_TOKEN`); everything else is open to anyone who can reach the port:
-
-- search, torrent details and file lists;
-- the shared favorites list (add / remove / clear);
-- `POST /api/torrents/{id}/download` — queues a torrent in your Transmission daemon, if one is configured;
-- parser status, logs and the list of dump files under `/dumps`;
-- Prometheus metrics at `/metrics`.
-
-Mutations from other origins are rejected (`Sec-Fetch-Site` / `Origin` check), so a random web page can't drive the API through your browser. Do **not** publish the port to the internet as is — put it behind a reverse proxy with authentication (basic auth, an SSO forward-auth, a VPN) if you need remote access.
-
-## Local development
-
-Backend:
-
-```bash
-# from repo root, with a Postgres running somewhere
-export RT_DATABASE_URL='postgres://rutracker:pw@localhost:5432/rutracker?sslmode=disable'
-
-go run ./cmd/rutracker           # migrates, then serves http://localhost:8080
-```
-
-Frontend (separate terminal, hot reload):
-
-```bash
-cd web
-npm ci
-npm run dev                      # http://localhost:5173
-# Vite proxies /api/* to localhost:8080 — set VITE_API_HOST to override.
-```
-
-Tests:
-
-```bash
-go test ./...                    # Postgres integration tests skip without DATABASE_URL (the test DSN, not RT_DATABASE_URL)
-cd web && npx tsc --noEmit && npx eslint .
-```
-
-Linting matches CI: `gofmt -l` over the tracked Go files, `go vet ./...`, `staticcheck ./...`.
 
 ## Configuration
 
@@ -487,7 +460,7 @@ The parse runs server-side and is tracked in `parser_runs`; a `running` row left
 
 </details>
 
-## Backend components
+## How it works
 
 One Go module, one binary that takes no commands: it migrates the schema and serves. Nothing is plugged in dynamically — adding a feature usually means a new exported function in one of these packages plus a wire-up line in `cmd/rutracker/`.
 
@@ -501,7 +474,7 @@ One Go module, one binary that takes no commands: it migrates the schema and ser
 | `internal/store/` | The canonical `Torrent` type plus all Postgres reads/writes — `GetStats`, `ListForums`, `Search` (with `ts_rank` + sort whitelist to keep ORDER BY off user input), `Get`, `CopyIngester` (per-worker handle: `SET synchronous_commit=off`, session-local `TEMP TABLE`, `COPY` → `INSERT…SELECT…ON CONFLICT`), and the `parser_runs` lifecycle + `Sweep` (mark-and-sweep deletion of torrents missing from the new dump). | `pgx/v5` |
 | `internal/peers/` | Scrapes seeders/leechers from a logged-in rutracker topic page: holds a `bb_session` cookie, parses the `<span class="seed/leech">` block, re-logins (single-flight) when the cookie dies, and rate-limits every outbound request. Store side (`UpsertPeers`/`GetPeers`/`CountCachedPeers`, `torrent_peers`, `rutracker_session`) lives in `internal/store/`. | `net/http`, [`golang.org/x/sync/singleflight`](https://pkg.go.dev/golang.org/x/sync/singleflight) |
 | `internal/bbcode/` | Tiny BBCode → HTML renderer. HTML-escapes first, drops `[img]` entirely, restricts URL schemes to `http`/`https`/`magnet`/`ftp`, supports `[b/i/u/s/quote/spoiler/list/code/pre]`, and placeholder-protects generated `<a>` tags so bracketed tokens inside URLs survive the tag passes. Unit-tested against XSS-via-raw-HTML, XSS-via-`javascript:` URL and placeholder forgery. | stdlib only |
-| `internal/server/` | `net/http` server (Go 1.22+ pattern routing). Handlers for `/api/*` and `/healthz`, Prometheus at `/metrics` with a per-request `method/route/status_class` middleware and a background gauge refresher (cheap gauges every 30 s; the full-scan content stats only when a new succeeded `parser_run` lands). Middleware chain: access log → metrics → security headers (CSP etc.) → cross-origin guard → gzip → 10 s API deadline. Versioned in-process caches (stats, forums, search totals) keyed on the dump version; `/api/forums` serves a matching ETag. SPA fallback serves the embedded Vite `dist/` with index.html as the 404 for client-side routing; hashed assets get `immutable` cache headers. | `net/http`, [`prometheus/client_golang`](https://github.com/prometheus/client_golang) |
+| `internal/server/` | `net/http` server (Go 1.22+ pattern routing). Handlers for `/api/*` and `/healthz`, Prometheus at `/metrics` with a per-request `method/route/status_class` middleware and a background gauge refresher (cheap gauges every 30 s; the full-scan content stats only when a new succeeded `parser_run` lands). Middleware chain: access log → metrics → security headers (CSP etc.) → cross-origin guard → gzip → 10 s API deadline. Versioned in-process caches (stats, forums, search totals) keyed on the dump version; `/api/forums` serves a matching ETag. An unknown `/api` path answers a JSON 404; any other unknown path falls back to the embedded Vite `dist/`'s index.html for client-side routing; hashed assets get `immutable` cache headers. | `net/http`, [`prometheus/client_golang`](https://github.com/prometheus/client_golang) |
 | `web/` (Go side) | Single Go file with `//go:embed all:dist` that exposes an `fs.FS` consumed by `server`. The whole SPA ships inside the binary — one image, one container, no static-asset CORS dance. | `embed` |
 
 Each parse worker holds its own `*pgxpool.Conn` for the lifetime of the run; the pool is sized to `numWorkers + 1` so the workers don't fight for a connection. The parser side uses one decoder goroutine and `chan []store.Torrent` (buffered to `numWorkers`) to hand batches off without copying.
@@ -523,6 +496,35 @@ web/                  # Vite + React + Tailwind v4 SPA, embedded into the binary
 grafana/              # importable Grafana dashboard JSON
 Dockerfile            # multi-stage: node → golang → alpine (in the GitHub snapshot)
 ```
+
+## Local development
+
+Backend:
+
+```bash
+# from repo root, with a Postgres running somewhere
+export RT_DATABASE_URL='postgres://rutracker:pw@localhost:5432/rutracker?sslmode=disable'
+
+go run ./cmd/rutracker           # migrates, then serves http://localhost:8080
+```
+
+Frontend (separate terminal, hot reload):
+
+```bash
+cd web
+npm ci
+npm run dev                      # http://localhost:5173
+# Vite proxies /api/* to localhost:8080 — set VITE_API_HOST to override.
+```
+
+Tests:
+
+```bash
+go test ./...                    # Postgres integration tests skip without DATABASE_URL (the test DSN, not RT_DATABASE_URL)
+cd web && npx tsc --noEmit && npx eslint .
+```
+
+Linting matches CI: `gofmt -l` over the tracked Go files, `go vet ./...`, `staticcheck ./...`.
 
 ## Operations
 
@@ -567,11 +569,23 @@ Online alternative — `pg_repack` (via triggers + shadow copy) avoids the exclu
 
 ## Releases
 
-Images are built by CI in the private repository on `vX.Y.Z` tags: **lint** (gofmt / vet / staticcheck + `tsc` / eslint) → **test** (`go test -race` against a real Postgres 17) → **image** (build + push `glowcow/rutracker:vX.Y.Z` to Docker Hub). The same lint, test and image build run on every push to the default branch, without a push to the Hub.
+Every `vX.Y.Z` tag publishes the image `glowcow/rutracker:vX.Y.Z` on Docker Hub, after the code has passed the linters and the tests against a real Postgres 17.
 
 Each tag also lands here as a [GitHub release](https://github.com/glowcow/rutracker-local/releases): one source-snapshot commit plus notes built from the commit subjects since the previous tag.
 
 Only the version tag is published — no moving `:latest`. (A `:latest` sharing a digest with the pinned `:vX.Y.Z` is a footgun: `docker system prune -a` on the host strips the version tag off the shared image, leaving a running container floating on an untagged id.)
+
+## Security model
+
+The app is built for a trusted home network and has **no user accounts**. Only starting a parse is gated (by `RT_ADMIN_TOKEN`); everything else is open to anyone who can reach the port:
+
+- search, torrent details and file lists;
+- the shared favorites list (add / remove / clear);
+- `POST /api/torrents/{id}/download` — queues a torrent in your Transmission daemon, if one is configured;
+- parser status, logs and the list of dump files under `/dumps`;
+- Prometheus metrics at `/metrics`.
+
+Mutations from other origins are rejected (`Sec-Fetch-Site` / `Origin` check), so a random web page can't drive the API through your browser. Do **not** publish the port to the internet as is — put it behind a reverse proxy with authentication (basic auth, an SSO forward-auth, a VPN) if you need remote access.
 
 ## Disclaimer
 

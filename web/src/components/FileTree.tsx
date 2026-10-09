@@ -133,12 +133,12 @@ function Level({
                 )}
               />
               {collapsed.has(n.path) ? (
-                <Folder className="size-3.5 shrink-0 text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]" />
+                <Folder className="size-3.5 shrink-0 text-[var(--color-ink-muted)]" />
               ) : (
-                <FolderOpen className="size-3.5 shrink-0 text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]" />
+                <FolderOpen className="size-3.5 shrink-0 text-[var(--color-ink-muted)]" />
               )}
               <span className="min-w-0 truncate text-[12.5px] font-medium">{n.name}</span>
-              <span className="ml-auto pl-3 shrink-0 flex items-baseline gap-2 text-[11px] tabular-nums text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
+              <span className="ml-auto pl-3 shrink-0 flex items-baseline gap-2 text-[11px] tabular-nums text-[var(--color-ink-muted)]">
                 <span>{n.count}</span>
                 <span>{formatBytes(n.size)}</span>
               </span>
@@ -155,11 +155,11 @@ function Level({
             // above them instead of with their chevrons.
             style={{ paddingLeft: depth * 14 + 18 }}
           >
-            <FileIcon className="size-3.5 shrink-0 text-[var(--color-rule)] dark:text-[var(--color-dark-rule)]" />
-            <span className="min-w-0 truncate text-[12.5px] text-[var(--color-ink-soft)] dark:text-[var(--color-dark-ink-soft)]">
+            <FileIcon className="size-3.5 shrink-0 text-[var(--color-rule)]" />
+            <span className="min-w-0 truncate text-[12.5px] text-[var(--color-ink-soft)]">
               {n.name}
             </span>
-            <span className="ml-auto pl-3 shrink-0 text-[11px] tabular-nums text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
+            <span className="ml-auto pl-3 shrink-0 text-[11px] tabular-nums text-[var(--color-ink-muted)]">
               {formatBytes(n.size)}
             </span>
           </li>

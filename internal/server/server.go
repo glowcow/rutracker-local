@@ -52,6 +52,12 @@ func Run(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) error {
 	mux.Handle("GET /api/admin/parse/stream", parseStreamHandler(ctrl))
 	mux.Handle("POST /api/admin/parse", requireAdmin(cfg.AdminToken, parseStartHandler(ctrl, cfg.DumpDir)))
 
+	// Any other /api path: without this the SPA fallback below would answer
+	// it with index.html and a 200. Per method — a bare "/api/" conflicts with "GET /".
+	for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodDelete} {
+		mux.Handle(m+" /api/", apiNotFound())
+	}
+
 	// SPA: serve the embedded Vite dist/. The catch-all `GET /` falls back to
 	// index.html for any URL that doesn't match a real file — supports
 	// in-app routing on refresh without us having to know the route table.
@@ -183,6 +189,14 @@ func healthz(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
+}
+
+// apiNotFound answers an unknown /api path with a JSON 404.
+func apiNotFound() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusNotFound, errResp("not found"))
+	})
 }
 
 // spaHandler serves distFS; unknown paths fall back to index.html (SPA history

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import type { Torrent } from "./api";
+import { getJSON, sendOK, type Torrent } from "./api";
 
 // Server-side global favorites (shared service, no per-user accounts → one set).
 // On first mount we migrate any leftover localStorage items up to the server and
@@ -18,25 +18,20 @@ export type FavoriteItem = Torrent & {
 type ListResponse = { items: FavoriteItem[] };
 
 async function apiList(): Promise<FavoriteItem[]> {
-  const r = await fetch("/api/favorites");
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const body = (await r.json()) as ListResponse;
+  const body = await getJSON<ListResponse>("/api/favorites");
   return body.items ?? [];
 }
 
 async function apiAdd(id: number): Promise<void> {
-  const r = await fetch(`/api/favorites/${id}`, { method: "POST" });
-  if (!r.ok && r.status !== 204) throw new Error(`HTTP ${r.status}`);
+  await sendOK(`/api/favorites/${id}`, "POST");
 }
 
 async function apiRemove(id: number): Promise<void> {
-  const r = await fetch(`/api/favorites/${id}`, { method: "DELETE" });
-  if (!r.ok && r.status !== 204) throw new Error(`HTTP ${r.status}`);
+  await sendOK(`/api/favorites/${id}`, "DELETE");
 }
 
 async function apiClear(): Promise<void> {
-  const r = await fetch(`/api/favorites`, { method: "DELETE" });
-  if (!r.ok && r.status !== 204) throw new Error(`HTTP ${r.status}`);
+  await sendOK("/api/favorites", "DELETE");
 }
 
 // One-shot migration of legacy localStorage favorites. Best-effort: any

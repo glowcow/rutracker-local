@@ -5,6 +5,7 @@ import { getForums, getStats, type Forum } from "../lib/api";
 import { cn } from "../lib/cn";
 import { formatBytes, formatDate } from "../lib/format";
 import { useLang } from "../lib/i18n";
+import { Collapse } from "./Collapse";
 import { Tooltip } from "./Tooltip";
 
 function formatCount(n: number): string {
@@ -138,15 +139,12 @@ type Props = {
   onSelectForum: (id: number | undefined) => void;
 };
 
-// localStorage flag for the strip's open/collapsed state. The panel is heavy
-// vertical space and most sessions are search-driven, so it starts collapsed
-// unless opened last time (picking a forum auto-opens it). Exported because
-// App's reset paths write "closed" — one constant, not a literal in two files.
+// The strip's open state, remembered across visits; it starts folded. Only its
+// own button opens it. Exported: App's reset paths write "closed" under it.
 export const STRIP_OPEN_KEY = "forums_open";
 
-// memo: with a forum selected the strip is force-open while the user types a
-// refining query — without memo every keystroke re-rendered hundreds of chips.
-// Requires a stable onSelectForum from App.
+// memo: an open strip holds hundreds of chips, and App renders on every
+// keystroke. Requires a stable onSelectForum from App.
 export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectForum }: Props) {
   const { t, p, pAbbr } = useLang();
   // expandedTop = LAST expanded top category; it survives closing so the
@@ -158,26 +156,15 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
   // chevron. Empty-mid (direct sub-forums) sits separately and is always
   // shown (see below).
   const [expandedMids, setExpandedMids] = useState<Set<string>>(new Set());
-  const [persistedOpen, setPersistedOpen] = useState<boolean>(
+  // A forum filter does not open the strip: a tap on a card's forum line
+  // would throw the results down the page.
+  const [stripOpen, setStripOpen] = useState<boolean>(
     () => localStorage.getItem(STRIP_OPEN_KEY) === "true",
   );
-  // Explicit override on top of the derived state, keyed to the selection it
-  // was made under. Without it "Hide forums" was a no-op while a forum filter
-  // force-opened the strip. A stale override (sel no longer matching) just stops
-  // applying, so picking another forum re-engages auto-open without an effect.
-  const [override, setOverride] = useState<{ sel: number | undefined; open: boolean } | null>(null);
-
-  // Derived open state: override for this exact selection wins; else the
-  // persisted preference OR an active forum filter auto-opens the strip.
-  const stripOpen =
-    override && override.sel === selectedForumId
-      ? override.open
-      : persistedOpen || selectedForumId !== undefined;
 
   const toggleStrip = () => {
     const next = !stripOpen;
-    setOverride({ sel: selectedForumId, open: next });
-    setPersistedOpen(next);
+    setStripOpen(next);
     localStorage.setItem(STRIP_OPEN_KEY, next ? "true" : "false");
   };
 
@@ -257,7 +244,7 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
           cluster, the trailing cluster fades out under the toggle button
           instead of wrapping onto a second row. Mask is benign when content
           fits — only the empty 24px gutter on the right gets faded. */}
-      <div className="flex items-baseline gap-3 sm:gap-4 text-[14px] sm:text-[17px] leading-tight text-[var(--color-ink-soft)] dark:text-[var(--color-dark-ink-soft)] py-3 sm:py-4 px-3 sm:px-4">
+      <div className="flex items-baseline gap-3 sm:gap-4 text-[14px] sm:text-[17px] leading-tight text-[var(--color-ink-soft)] py-3 sm:py-4 px-3 sm:px-4">
         {stats ? (
           <div
             className="flex-1 min-w-0 flex items-baseline gap-x-2 sm:gap-x-4 flex-nowrap overflow-hidden"
@@ -270,7 +257,7 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
           >
             <span className="flex items-baseline gap-1.5 sm:gap-2 whitespace-nowrap shrink-0">
               <Database className="size-3.5 sm:size-4 translate-y-[2px] shrink-0" />
-              <span className="tabular-nums font-semibold tracking-[-0.01em] text-[var(--color-ink)] dark:text-[var(--color-dark-ink)]">
+              <span className="tabular-nums font-semibold tracking-[-0.01em] text-[var(--color-ink)]">
                 {formatCount(stats.torrents_total)}
               </span>{" "}
               <span className="text-[11px] sm:text-[12px]">
@@ -281,17 +268,17 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
                 390px only two clusters fit next to the toggle, and "when was
                 this dump loaded" beats a static total size. */}
             <span className="hidden sm:flex items-baseline gap-1.5 sm:gap-2 whitespace-nowrap shrink-0">
-              <span className="text-[var(--color-rule)] dark:text-[var(--color-dark-rule)]">/</span>
+              <span className="text-[var(--color-rule)]">/</span>
               <HardDrive className="size-3.5 sm:size-4 translate-y-[2px] shrink-0" />
-              <span className="tabular-nums font-semibold tracking-[-0.01em] text-[var(--color-ink)] dark:text-[var(--color-dark-ink)]">
+              <span className="tabular-nums font-semibold tracking-[-0.01em] text-[var(--color-ink)]">
                 {formatBytes(stats.total_size_bytes)}
               </span>
             </span>
             {/* Hidden on mobile: the wider Russian toggle label left this
                 cluster half-masked, reading as a truncated "1". */}
             <span className="hidden sm:flex items-baseline gap-1.5 sm:gap-2 whitespace-nowrap shrink-0">
-              <span className="text-[var(--color-rule)] dark:text-[var(--color-dark-rule)]">/</span>
-              <span className="tabular-nums font-semibold tracking-[-0.01em] text-[var(--color-ink)] dark:text-[var(--color-dark-ink)]">
+              <span className="text-[var(--color-rule)]">/</span>
+              <span className="tabular-nums font-semibold tracking-[-0.01em] text-[var(--color-ink)]">
                 {formatCount(stats.forums_count)}
               </span>{" "}
               <span className="text-[11px] sm:text-[12px]">
@@ -312,10 +299,10 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
                   {/* Inter's "@" is drawn short and hangs below the baseline,
                       so it reads low next to lining digits — nudged up and
                       slightly enlarged to sit on the digits' optical centre. */}
-                  <span className="text-[1.1em] leading-none -translate-y-[2px] text-[var(--color-rule)] dark:text-[var(--color-dark-rule)]">
+                  <span className="text-[1.1em] leading-none -translate-y-[2px] text-[var(--color-rule)]">
                     @
                   </span>
-                  <span className="tabular-nums font-semibold tracking-[-0.01em] text-[var(--color-ink)] dark:text-[var(--color-dark-ink)]">
+                  <span className="tabular-nums font-semibold tracking-[-0.01em] text-[var(--color-ink)]">
                     {formatDate(stats.dump_updated_at)}
                   </span>
                 </span>
@@ -325,9 +312,9 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
                 cache that can no longer refresh is worse than no number. */}
             {stats.peers_enabled && (
               <span className="flex items-baseline gap-1.5 sm:gap-2 whitespace-nowrap shrink-0">
-                <span className="text-[var(--color-rule)] dark:text-[var(--color-dark-rule)]">/</span>
+                <span className="text-[var(--color-rule)]">/</span>
                 <Users className="size-3.5 sm:size-4 translate-y-[2px] shrink-0" />
-                <span className="tabular-nums font-semibold tracking-[-0.01em] text-[var(--color-ink)] dark:text-[var(--color-dark-ink)]">
+                <span className="tabular-nums font-semibold tracking-[-0.01em] text-[var(--color-ink)]">
                   {formatCount(stats.peers_cached)}
                 </span>{" "}
                 <span className="text-[11px] sm:text-[12px]">
@@ -355,8 +342,8 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
           className={cn(
             "ml-auto self-center shrink-0 flex items-center gap-1.5",
             "text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.08em]",
-            "text-[var(--color-ink-soft)] dark:text-[var(--color-dark-ink-soft)]",
-            "hover:text-[var(--color-ink)] dark:hover:text-[var(--color-dark-ink)]",
+            "text-[var(--color-ink-soft)]",
+            "hover:text-[var(--color-ink)]",
             "transition-colors leading-none",
           )}
         >
@@ -369,22 +356,10 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
         </button>
       </div>
 
-      {/* Forum chips section — animated expand/collapse via the CSS
-          grid-rows 0fr↔1fr trick (the modern height:auto animation; runs on
-          the compositor). Content stays mounted while closed —
-          the row collapses and the inner overflow-hidden clips it; `inert`
-          keeps the hidden chips out of tab order and hit-testing. */}
-      <div
-        inert={!stripOpen}
-        className={cn(
-          "grid swiss-collapse",
-          stripOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
-        )}
-      >
-        <div className="overflow-hidden min-h-0">
+      <Collapse open={stripOpen}>
             {/* rounded-b only — the top edge carries the hairline rule and
                 stays square against it. */}
-            <div className="swiss-rule-top rounded-b-md pt-3 pb-4 px-3 sm:px-4 bg-[var(--color-paper-soft)] dark:bg-[var(--color-dark-paper-soft)]">
+            <div className="swiss-rule-top rounded-b-md pt-3 pb-4 px-3 sm:px-4 bg-[var(--color-paper-soft)]">
               {/* Row 1 — top-level categories */}
         <div className="flex flex-wrap gap-x-4 gap-y-2">
           {isLoading && (
@@ -414,42 +389,28 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
           ))}
         </div>
 
-        {/* Row 2 — middle sections + leaf chips for the expanded top group.
-            Same grid-rows collapse, two nested layers: (1) the whole
-            mid-list when a top toggles, (2) each mid's leaf chips when its
-            chevron toggles. displayGroup keeps the LAST expanded group
-            rendered while collapsing so the close still has content to
-            animate over; switching directly between tops swaps content
-            without a tween (acceptable: open/close keep the animation). */}
+        {/* Row 2 — the open top group's sections, each folding its own leaves.
+            displayGroup keeps the last group rendered while it folds away. */}
         {displayGroup && (
-          <div
-            inert={!midsOpen}
-            className={cn(
-              "grid swiss-collapse",
-              midsOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
-            )}
-          >
-            <div className="overflow-hidden min-h-0">
-              <div className="mt-3 pt-3 swiss-rule-top space-y-3">
+          <Collapse open={midsOpen} className="mt-3 pt-3 swiss-rule-top space-y-3">
           {displayGroup.mids.map((mid) => {
             const key = `${displayGroup.top}/${mid.midName}`;
             const isDirect = mid.midName === "";
-            // Direct (2-level) forums: quiet italic label, always shown (small
-            // count, useful quick-picks). Proper mid sections start collapsed.
+            // Direct (2-level) forums are always shown; a section starts folded.
             const expanded = isDirect || expandedMids.has(key);
             return (
               <div key={key} className="space-y-1.5">
                 {isDirect ? (
                   <div className="swiss-eyebrow flex items-baseline gap-2">
                     <span>{t("forums_direct")}</span>
-                    <span className="tabular-nums normal-case tracking-normal text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
+                    <span className="tabular-nums normal-case tracking-normal text-[var(--color-ink-muted)]">
                       ({formatCount(mid.totalCount)})
                     </span>
                   </div>
                 ) : (
                   <button
                     onClick={() => toggleMid(key)}
-                    className="flex items-center gap-2 swiss-eyebrow hover:text-[var(--color-ink)] dark:hover:text-[var(--color-dark-ink)] transition-colors py-0.5"
+                    className="flex items-center gap-2 swiss-eyebrow hover:text-[var(--color-ink)] transition-colors py-0.5"
                   >
                     <ChevronRight
                       className={cn(
@@ -458,26 +419,20 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
                       )}
                     />
                     <span>{mid.midName}</span>
-                    <span className="normal-case tracking-normal tabular-nums text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]">
+                    <span className="normal-case tracking-normal tabular-nums text-[var(--color-ink-muted)]">
                       {formatCount(mid.totalCount)}
                     </span>
                   </button>
                 )}
-                <div
-                  inert={!expanded}
-                  className={cn(
-                    "grid swiss-collapse",
-                    expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
-                  )}
+                <Collapse
+                  open={expanded}
+                  className={cn("flex flex-wrap gap-x-4 gap-y-1.5", !isDirect && "pl-4")}
                 >
-                  <div className="overflow-hidden min-h-0">
-                    <div className={cn("flex flex-wrap gap-x-4 gap-y-1.5", !isDirect && "pl-4")}>
                       {mid.leaves.map((l) => (
                         <SubChip
                           key={l.forum.id}
                           forum={l.forum}
                           leafLabel={l.isUmbrella ? t("forums_umbrella") : l.leafLabel}
-                          isUmbrella={l.isUmbrella}
                           active={l.forum.id === selectedForumId}
                           onClick={() =>
                             onSelectForum(
@@ -486,24 +441,16 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
                           }
                         />
                       ))}
-                    </div>
-                  </div>
-                </div>
+                </Collapse>
               </div>
             );
           })}
-              </div>
-            </div>
-          </div>
+          </Collapse>
         )}
             </div>
-            {/* Plain-paper spacer below the panel — gives the meta-row (or
-                hero) clear breathing room from the last chip row regardless
-                of expansion depth. Inside the collapsing row so it folds
-                with the height tween. */}
+            {/* Air under the panel; inside the fold, so it folds away too. */}
             <div aria-hidden="true" className="h-3 sm:h-4" />
-        </div>
-      </div>
+      </Collapse>
     </div>
   );
 });
@@ -529,7 +476,7 @@ function TopChip({
         "shrink-0 flex items-center gap-1.5 text-[13px] transition-colors",
         expanded
           ? "text-[var(--color-accent)] font-semibold"
-          : "text-[var(--color-ink)] dark:text-[var(--color-dark-ink)] hover:text-[var(--color-accent)]",
+          : "text-[var(--color-ink)] hover:text-[var(--color-accent)]",
       )}
     >
       <span className="max-w-[220px] truncate">{label}</span>
@@ -538,7 +485,7 @@ function TopChip({
           "text-[11px] tabular-nums",
           expanded
             ? "text-[var(--color-accent)]"
-            : "text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]",
+            : "text-[var(--color-ink-muted)]",
         )}
       >
         {formatCount(count)}
@@ -557,13 +504,11 @@ function TopChip({
 function SubChip({
   forum,
   leafLabel,
-  isUmbrella,
   active,
   onClick,
 }: {
   forum: Forum;
   leafLabel: string;
-  isUmbrella?: boolean;
   active: boolean;
   onClick: () => void;
 }) {
@@ -575,9 +520,7 @@ function SubChip({
         "shrink-0 flex items-baseline gap-1.5 text-[12.5px] transition-colors",
         active
           ? "text-[var(--color-accent)] font-semibold"
-          : isUmbrella
-            ? "italic text-[var(--color-ink)] dark:text-[var(--color-dark-ink)] hover:text-[var(--color-accent)]"
-            : "text-[var(--color-ink)] dark:text-[var(--color-dark-ink)] hover:text-[var(--color-accent)]",
+          : "text-[var(--color-ink)] hover:text-[var(--color-accent)]",
       )}
     >
       <span className="max-w-[260px] truncate">{leafLabel}</span>
@@ -586,7 +529,7 @@ function SubChip({
           "text-[11px] tabular-nums",
           active
             ? "text-[var(--color-accent)]"
-            : "text-[var(--color-ink-muted)] dark:text-[var(--color-dark-ink-muted)]",
+            : "text-[var(--color-ink-muted)]",
         )}
       >
         {formatCount(forum.count)}
