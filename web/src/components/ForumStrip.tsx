@@ -24,9 +24,8 @@ function splitPath(name: string): string[] {
 type LeafForum = {
   forum: Forum;
   leafLabel: string;
-  // The "общий" entry of a subcategory: a 2-level forum whose leaf name matches
-  // an existing 3-level middle (e.g. forum 314's leaf is the umbrella of a middle
-  // that also has sub-leaves). Folded into that middle and pinned first.
+  // A 2-level forum whose leaf names an existing 3-level middle: the general
+  // forum of that subcategory, folded into it and pinned first.
   isUmbrella: boolean;
 };
 
@@ -42,15 +41,11 @@ type Group = {
   mids: Mid[];
 };
 
-// Collator: Russian primary, English secondary. Handles `numeric: true` so
-// e.g. "Top 9" sorts before "Top 10" even though the alphabet check would
-// otherwise reverse them.
+// Russian first, then English; numeric, so "Top 9" sorts before "Top 10".
 const ALPHA = new Intl.Collator(["ru", "en"], { numeric: true });
 
-// Build a 3-tier (top → mid → leaf) structure from the flat forum list. Two
-// passes: (1) collect middle names appearing in 3+ level forums per top (to tell
-// a 2-level forum's leaf "umbrella of a known subcategory" from a standalone
-// sub-forum); (2) bucket each forum. 4-level forums (7 in the dump) fold past level 2.
+// Builds top → mid → leaf from the flat list: first collect the middle
+// names per top, then bucket each forum. Deeper levels fold into the leaf.
 function buildGroups(forums: Forum[]): Group[] {
   const knownMids = new Map<string, Set<string>>();
   for (const f of forums) {
@@ -80,9 +75,8 @@ function buildGroups(forums: Forum[]): Group[] {
     } else if (parts.length === 2) {
       const candidate = parts[1];
       if (knownMids.get(top)?.has(candidate)) {
-        // Fold this 2-level forum into the matching middle as its umbrella
-        // ("общий") entry. The label here is a fallback — SubChip renders
-        // umbrella entries via t("forums_umbrella") for the EN locale.
+        // Folded into the matching middle as its general entry; the label is a
+        // fallback — the chip renders it from the dictionary.
         mid = candidate;
         leafLabel = "Общий";
         isUmbrella = true;
@@ -147,14 +141,11 @@ export const STRIP_OPEN_KEY = "forums_open";
 // keystroke. Requires a stable onSelectForum from App.
 export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectForum }: Props) {
   const { t, p, pAbbr } = useLang();
-  // expandedTop = LAST expanded top category; it survives closing so the
-  // grid-rows collapse still has content to animate over. topOpen alone
-  // says whether that section is currently expanded.
+  // The last open top category: kept after the close so the fold has
+  // content to animate over; topOpen says whether it is open.
   const [expandedTop, setExpandedTop] = useState<string | null>(null);
   const [topOpen, setTopOpen] = useState(false);
-  // Mid sections start collapsed — user expands what they want via the
-  // chevron. Empty-mid (direct sub-forums) sits separately and is always
-  // shown (see below).
+  // Sections start folded; direct sub-forums are always shown.
   const [expandedMids, setExpandedMids] = useState<Set<string>>(new Set());
   // A forum filter does not open the strip: a tap on a card's forum line
   // would throw the results down the page.
@@ -173,9 +164,7 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
   const nounFor = (key: "torrents" | "forums", n: number) =>
     n >= 1000 ? pAbbr(key) : p(key, n);
 
-  // Forums + stats are immutable for the session — a new dump arrives via
-  // a redeploy, not while the tab is open. Cache forever so we don't
-  // refetch them on every re-mount / tab-focus / 30s-stale window.
+  // Forums and stats do not change while the tab is open: cached for good.
   const { data: forumsData, isLoading } = useQuery({
     queryKey: ["forums"],
     queryFn: getForums,
@@ -210,9 +199,8 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
     });
   };
 
-  // Re-clicking the open top folds it; picking another swaps the content
-  // (no tween for the swap — open/close keep the animation) and resets the
-  // mid expansion so the next category starts clean.
+  // A second click folds the open top; another top swaps the content and
+  // resets its sections.
   const toggleTop = (top: string) => {
     if (topOpen && top === expandedTop) {
       setTopOpen(false);
@@ -224,26 +212,11 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
   };
 
   return (
-    // Swiss strip — no outer rules; the header above and the meta-row below
-    // each provide their own boundary, so adding ours here doubled the
-    // hairline. Internal hairlines separate the stats row from the chips
-    // panel when expanded.
+    // No outer rules: the header above and the meta row below draw their own.
     <div>
-      {/* Stats line — Swiss editorial sub-display: numbers are the data,
-          they get the weight; the noun ("torrents", "forums") sits soft
-          next to them. Sized between body text and the hero so it reads
-          as a data ribbon rather than a control row. */}
-      {/* Mobile shrinks stats so the row fits stats + toggle in one line
-          (and the toggle stops looking awkwardly orphaned). sm+ keeps the
-          full editorial 22px ribbon. Each [slash + cluster] is grouped via
-          whitespace-nowrap so a slash never lands alone at the start of a
-          wrapped row.
-
-          Stats inner div is flex-nowrap + overflow-hidden with a right-edge
-          mask-gradient: when the viewport is too narrow to hold every
-          cluster, the trailing cluster fades out under the toggle button
-          instead of wrapping onto a second row. Mask is benign when content
-          fits — only the empty 24px gutter on the right gets faded. */}
+      {/* The numbers carry the weight, their nouns sit soft beside them. */}
+      {/* One row at every width: a cluster that does not fit fades out under
+          the toggle instead of wrapping. */}
       <div className="flex items-baseline gap-3 sm:gap-4 text-[14px] sm:text-[17px] leading-tight text-[var(--color-ink-soft)] py-3 sm:py-4 px-3 sm:px-4">
         {stats ? (
           <div
@@ -264,9 +237,8 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
                 {nounFor("torrents", stats.torrents_total)}
               </span>
             </span>
-            {/* Hidden on mobile so the dump stamp below stays visible: at
-                390px only two clusters fit next to the toggle, and "when was
-                this dump loaded" beats a static total size. */}
+            {/* Hidden below sm: only two clusters fit beside the toggle, and the dump's
+                date says more than a total size. */}
             <span className="hidden sm:flex items-baseline gap-1.5 sm:gap-2 whitespace-nowrap shrink-0">
               <span className="text-[var(--color-rule)]">/</span>
               <HardDrive className="size-3.5 sm:size-4 translate-y-[2px] shrink-0" />
@@ -285,20 +257,13 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
                 {nounFor("forums", stats.forums_count)}
               </span>
             </span>
-            {/* Dump freshness — when the last successful ingest finished.
-                Kept visible at every width: it's what tells the reader how
-                current everything else in this ribbon is. */}
+            {/* When the last successful load finished; shown at every width. */}
             {stats.dump_updated_at && (
-              <Tooltip text={t("stats_dump_updated")}>
-                {/* No slash before it: the "@" is itself the separator, and
-                    the date is a value, so it carries the same weight and
-                    size as the other numbers in the ribbon. The negative ml
-                    trims the row's gap down to this cluster's own, so the "@"
-                    keeps equal — and tight — air on both sides. */}
+              <Tooltip text={t.statsDumpUpdated}>
+                {/* No slash before it: the @ is the separator. The negative margin trims
+                    the row's gap to the cluster's own, so the @ has equal air on both sides. */}
                 <span className="flex items-baseline gap-1.5 sm:gap-2 -ml-0.5 sm:-ml-2 whitespace-nowrap shrink-0">
-                  {/* Inter's "@" is drawn short and hangs below the baseline,
-                      so it reads low next to lining digits — nudged up and
-                      slightly enlarged to sit on the digits' optical centre. */}
+                  {/* Inter draws @ short and low: nudged up and enlarged to sit with the digits. */}
                   <span className="text-[1.1em] leading-none -translate-y-[2px] text-[var(--color-rule)]">
                     @
                   </span>
@@ -318,17 +283,14 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
                   {formatCount(stats.peers_cached)}
                 </span>{" "}
                 <span className="text-[11px] sm:text-[12px]">
-                  {t("peers_cached_label")}
+                  {t.peersCachedLabel}
                 </span>
               </span>
             )}
           </div>
         ) : (
-          /* Skeleton placeholder — bars are sized to the actual text
-             line-height (14px×1.25 ≈ 18px on mobile, 17px×1.25 ≈ 22px
-             on sm+) so the row's height stays put when real stats land.
-             Otherwise the layout would jump 10-12 px downward as the
-             cluster grew, which the user reads as a "bounce". */
+          /* Bars as tall as the text line, so the row keeps its height when the
+             numbers land. */
           <div className="flex-1 min-w-0 flex items-center gap-x-2 sm:gap-x-4 flex-nowrap overflow-hidden">
             <span className="swiss-skeleton h-[18px] sm:h-[22px] w-24 sm:w-40 shrink-0" />
             <span className="swiss-skeleton h-[18px] sm:h-[22px] w-16 sm:w-24 shrink-0" />
@@ -347,7 +309,7 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
             "transition-colors leading-none",
           )}
         >
-          <span className="leading-none">{stripOpen ? t("forums_hide") : t("forums_show")}</span>
+          <span className="leading-none">{stripOpen ? t.forumsHide : t.forumsShow}</span>
           {stripOpen ? (
             <ChevronUp className="size-3 sm:size-3.5 shrink-0" />
           ) : (
@@ -363,10 +325,7 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
               {/* Row 1 — top-level categories */}
         <div className="flex flex-wrap gap-x-4 gap-y-2">
           {isLoading && (
-            /* Skeleton row for the top-level forum chips — random-ish
-               widths so it doesn't look like an evenly-spaced ruler.
-               First load only; once cached (staleTime:Infinity) the
-               panel opens with real chips immediately. */
+            /* Uneven widths, so it does not read as a ruler; first load only. */
             <>
               <span className="swiss-skeleton h-4 w-28" />
               <span className="swiss-skeleton h-4 w-36" />
@@ -402,7 +361,7 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
               <div key={key} className="space-y-1.5">
                 {isDirect ? (
                   <div className="swiss-eyebrow flex items-baseline gap-2">
-                    <span>{t("forums_direct")}</span>
+                    <span>{t.forumsDirect}</span>
                     <span className="tabular-nums normal-case tracking-normal text-[var(--color-ink-muted)]">
                       ({formatCount(mid.totalCount)})
                     </span>
@@ -432,7 +391,7 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
                         <SubChip
                           key={l.forum.id}
                           forum={l.forum}
-                          leafLabel={l.isUmbrella ? t("forums_umbrella") : l.leafLabel}
+                          leafLabel={l.isUmbrella ? t.forumsUmbrella : l.leafLabel}
                           active={l.forum.id === selectedForumId}
                           onClick={() =>
                             onSelectForum(

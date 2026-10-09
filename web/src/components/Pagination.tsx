@@ -27,13 +27,13 @@ export function Pagination({ page, pageSize, total, onChange }: Props) {
 
   return (
     <nav
-      aria-label={t("pagination_aria")}
+      aria-label={t.paginationAria}
       className="flex flex-wrap items-center justify-center gap-3 py-5 px-3 sm:px-4 select-none"
     >
       <StepButton
         onClick={() => go(page - 1)}
         disabled={page === 0}
-        aria-label={t("pagination_prev")}
+        aria-label={t.paginationPrev}
       >
         <ChevronLeft className="size-3.5" />
       </StepButton>
@@ -57,7 +57,7 @@ export function Pagination({ page, pageSize, total, onChange }: Props) {
       <StepButton
         onClick={() => go(page + 1)}
         disabled={page === lastPage}
-        aria-label={t("pagination_next")}
+        aria-label={t.paginationNext}
       >
         <ChevronRight className="size-3.5" />
       </StepButton>

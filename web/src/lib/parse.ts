@@ -1,8 +1,7 @@
 import { getJSON, send } from "./api";
 
-// Admin parse — client types + API calls for the in-app dump loader. Read
-// endpoints are open on the LAN; POST /api/admin/parse needs the bearer token
-// (per-browser localStorage). Types mirror the backend JSON (snake_case).
+// Types and calls of the in-app dump loader. Reading is open; starting a
+// parse needs the bearer token. Types mirror the backend's JSON.
 
 export type DumpFile = {
   name: string;
@@ -76,9 +75,8 @@ export const getStatus = () => getJSON<StatusResp>("/api/admin/parse/status");
 // ── Write API (bearer token) ──
 export type StartOpts = { source: string; batch_size: number; sweep: boolean };
 
-// startParse returns on 202. On a known error it throws Error(code) where code
-// is one of "conflict" | "unauthorized" | "disabled" | "http" — the component
-// maps that to a localized message.
+// Resolves on 202; otherwise throws Error(code): "conflict", "unauthorized",
+// "disabled" or "http" — the panel maps the code to a message.
 export async function startParse(opts: StartOpts, token: string): Promise<void> {
   const r = await send("/api/admin/parse", {
     method: "POST",

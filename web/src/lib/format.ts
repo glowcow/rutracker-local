@@ -8,9 +8,7 @@ export function formatBytes(bytes: number): string {
   return `${formatted} ${UNITS[i]}`;
 }
 
-// Accepts the API's ISO 8601 registered_at directly — the previous unix-
-// timestamp signature forced both call sites to keep a private toUnixts()
-// helper whose result this immediately multiplied back into a Date.
+// Takes the API's ISO 8601 string; dates in content are dd-mm-yyyy.
 export function formatDate(iso: string): string {
   const d = new Date(iso);
   const dd = String(d.getDate()).padStart(2, "0");

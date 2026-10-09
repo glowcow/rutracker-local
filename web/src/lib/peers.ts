@@ -1,8 +1,7 @@
 import { getJSON } from "./api";
 
-// Client for the live seeders/leechers endpoint (GET /api/torrents/:id/peers).
-// The server returns cache when fresh (< 24h) and otherwise scrapes rutracker;
-// on a failed scrape it hands back the stale cache plus an `error` reason.
+// GET /api/torrents/:id/peers: the cache while fresh, else a scrape; after a
+// failed scrape the stale cache comes back with an `error`.
 
 export type PeersError = "auth" | "unavailable";
 

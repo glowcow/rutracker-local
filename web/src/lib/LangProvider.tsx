@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   type Ctx,
-  type Dict,
   type Lang,
   LangCtx,
   LOCALE,
@@ -28,7 +27,7 @@ export function LangProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const t = useCallback((k: keyof Dict) => dicts[lang][k], [lang]);
+  const t = dicts[lang];
 
   const locale = LOCALE[lang];
   const pluralRules = useMemo(() => new Intl.PluralRules(locale), [locale]);

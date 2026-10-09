@@ -25,7 +25,7 @@ export function Footer() {
           </Tooltip>
           <span className="text-[var(--color-rule)]">/</span>
           <span>
-            <span className="hidden sm:inline">{t("footer_built")} </span>
+            <span className="hidden sm:inline">{t.footerBuilt} </span>
             {BUILD_DATE}
           </span>
         </span>

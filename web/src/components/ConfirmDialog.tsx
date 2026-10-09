@@ -69,7 +69,7 @@ export function ConfirmDialog({ open, title, body, confirmLabel, onConfirm, onCl
           <button
             type="button"
             onClick={onClose}
-            aria-label={t("cancel")}
+            aria-label={t.cancel}
             className="size-10 grid place-items-center shrink-0 rounded-md text-[var(--color-ink-soft)] hover:text-[var(--color-ink)] transition-colors duration-150"
           >
             <X aria-hidden="true" className="size-4 shrink-0" />
@@ -89,7 +89,7 @@ export function ConfirmDialog({ open, title, body, confirmLabel, onConfirm, onCl
                 "hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]",
               )}
             >
-              {t("cancel")}
+              {t.cancel}
             </button>
             <button
               type="button"

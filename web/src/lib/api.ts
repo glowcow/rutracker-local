@@ -8,9 +8,8 @@ export type Torrent = {
   size_bytes: number;
   registered_at: string; // ISO 8601
   hash: string;
-  // Live peer cache, joined on list reads. Absent when a torrent has never
-  // been checked (the badge shows "—"); peers_checked_at lets the list grey
-  // out values older than the refresh window.
+  // The cached peer counts, joined on list reads; absent for a torrent that
+  // was never checked.
   seeders?: number;
   leechers?: number;
   peers_checked_at?: string; // ISO 8601
@@ -110,10 +109,8 @@ export function getTorrent(id: number) {
   return getJSON<TorrentDetail>(`/api/torrents/${id}`);
 }
 
-// File listing carried by the dump. Entries are [path, size] tuples — the
-// server stores them in exactly this shape, so the response is the stored
-// bytes decompressed. files_count is the real total: when `truncated`, only
-// the first 1000 entries are present. A 404 means the dump had no listing.
+// The dump's file list as [path, size] pairs. files_count is the real total:
+// when truncated only the first 1000 are present. A 404 means no list.
 export type TorrentFiles = {
   files_count: number;
   truncated: boolean;
@@ -131,9 +128,8 @@ export function getTransmissionStatus() {
   return getJSON<TransmissionStatus>("/api/transmission/status");
 }
 
-// Push a torrent's magnet into Transmission. "added" = queued now, "duplicate"
-// = the daemon already had it. Throws on a transport/RPC failure so the button
-// can show an error state.
+// "added" = queued now, "duplicate" = the daemon already had it; a failed
+// request throws.
 export type DownloadResult = { status: "added" | "duplicate"; name?: string };
 
 export async function sendToTransmission(id: number): Promise<DownloadResult> {

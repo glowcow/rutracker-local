@@ -8,10 +8,8 @@ import {
   type SSEvent,
 } from "./parse";
 
-// useParseStream subscribes to the server's parse SSE while the panel is open.
-// The parse lives server-side, so resume is transparent: on open it asks /status
-// and, if running, attaches (the stream replays the run so reloads/other devices
-// see live progress). begin() attaches optimistically right after a start.
+// Subscribes to the parse stream while the panel is open. On open it asks
+// /status and attaches to a running parse; begin() attaches after a start.
 export function useParseStream(open: boolean) {
   const [status, setStatus] = useState<ParseStatus>("idle");
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -29,9 +27,8 @@ export function useParseStream(open: boolean) {
     if (esRef.current) return;
     const es = new EventSource("/api/admin/parse/stream");
     esRef.current = es;
-    // onopen fires on the initial connect AND on every auto-reconnect. The
-    // server replays the whole run buffer on each connect, so resetting here
-    // keeps a reconnect from duplicating log lines.
+    // Fires on every reconnect too, and the server replays the whole run:
+    // resetting here keeps log lines from doubling.
     es.onopen = () => {
       setLogs([]);
       setProgress(null);
@@ -64,10 +61,8 @@ export function useParseStream(open: boolean) {
     // onerror: EventSource auto-reconnects on its own — nothing to do.
   }, []);
 
-  // On close: drop the connection (state stays put, hidden by CSS, refreshed on
-  // the next open). On open: ask /status and either attach to a running parse
-  // (resume) or reset to the idle view. Resets live in the async callback — the
-  // lint (and React) forbid synchronous setState in an effect body.
+  // Closed: drop the connection. Open: ask /status, then attach or go idle —
+  // in the async callback, since an effect body may not set state.
   useEffect(() => {
     if (!open) {
       disconnect();

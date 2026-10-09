@@ -33,9 +33,8 @@ function App() {
   const { items: favItems, count: favCount, clear: clearFavs } = useFavorites();
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounced(query, 300);
-  // selectedId survives drawer close (it's "last viewed", not "currently
-  // open") so the drawer keeps its content rendered during the CSS close
-  // transition; drawerOpen alone drives visibility.
+  // The last viewed id outlives the close, so the drawer keeps its content
+  // through the closing transition; drawerOpen alone shows it.
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const openTorrent = useCallback((id: number) => {
@@ -46,23 +45,17 @@ function App() {
   const [sort, setSortState] = useState<Sort>({ key: "relevance", dir: "desc" });
   const [forumId, setForumIdState] = useState<number | undefined>(undefined);
   const [page, setPage] = useState(0);
-  // favOnly turns the results panel into a local-snapshot view of starred
-  // torrents. Mutually exclusive with the search query / forum filter: any of
-  // those entering active state turns favOnly off, and vice versa, so the
-  // results meta-row never describes two competing sources of truth.
+  // The results show the starred torrents instead of a search. Exclusive with
+  // the query and the forum filter: setting one clears the other.
   const [favOnly, setFavOnly] = useState(false);
-  // Bumped to signal ForumStrip to collapse its expanded top/mid sections.
-  // Triggers: brand-button reset, ⭐ click that enters favOnly. Local state
-  // for chip expansion stays in the strip; this is just a fold-up signal.
+  // Bumped to remount ForumStrip, which folds its open sections.
   const [forumsResetKey, setForumsResetKey] = useState(0);
   const [adminOpen, setAdminOpen] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const closeConfirm = useCallback(() => setConfirmClear(false), []);
 
-  // Any filter change resets the cursor (staying on page 17 after picking a
-  // forum would land on a phantom page). Reset is folded into the setters, not
-  // a useEffect — react-hooks forbids sync setState in effects. Setters are
-  // useCallback'd because memoized children (ForumStrip, ResultCard) depend on them.
+  // A filter change resets the page, inside the setter — an effect may not
+  // set state. Stable callbacks: the memoised children depend on them.
   const setQueryReset = useCallback((v: string) => {
     setQuery(v);
     setPage(0);
@@ -78,21 +71,14 @@ function App() {
     if (id !== undefined) setFavOnly(false);
   }, []);
   const toggleFavOnly = () => {
-    // Side effects live outside the setFavOnly updater on purpose: React
-    // runs updaters during render (twice in StrictMode), so anything
-    // non-idempotent inside one silently doubles.
+    // Side effects stay outside the updater: React may run an updater twice.
     const next = !favOnly;
     if (next) {
-      // Entering favorites mode is an exclusive view, so drop any active
-      // search/forum filter — otherwise the meta-row count, the sort
-      // control, and the pagination would all be inconsistent with the
-      // local snapshot list we're about to render.
+      // Favourites are an exclusive view: drop the search and the forum filter.
       setQuery("");
       setForumIdState(undefined);
       setPage(0);
-      // Force the strip back to its default-closed state (panel + all
-      // expanded categories). ForumStrip reads this key on mount, so we
-      // write before the remount triggered by forumsResetKey below.
+      // ForumStrip reads this key on mount: write it before the remount below.
       localStorage.setItem(STRIP_OPEN_KEY, "false");
       setForumsResetKey((k) => k + 1);
     }
@@ -102,9 +88,8 @@ function App() {
   // Don't run an unbounded SELECT on mount — wait until the user types or picks
   // a forum, else every page load scans ~10M rows for "newest 50".
   const hasFilter = debouncedQuery !== "" || forumId !== undefined;
-  // favOnly is authoritative for the search-vs-favorites view: toggleFavOnly
-  // clears query/forum synchronously, but debouncedQuery lags 300 ms — deriving
-  // the view from it briefly resurrected the abandoned search (stale cards + refetch).
+  // favOnly decides the view: debouncedQuery lags the cleared query by 300 ms
+  // and would bring the abandoned search back for a moment.
   const isFavView = favOnly;
 
   const { data, isFetching, error } = useQuery({
@@ -130,10 +115,8 @@ function App() {
   });
   const peersEnabled = stats?.peers_enabled ?? false;
 
-  // Forum lookup so the active chip can show the leaf name instead of a
-  // bare id. The query is shared with ForumStrip via the same key — no
-  // extra request. Same session-long cache settings as ForumStrip so
-  // both observers agree the data is fresh forever.
+  // The same query as ForumStrip's, so no second request: the chip needs the
+  // forum's name, not its id.
   const { data: forumsData } = useQuery({
     queryKey: ["forums"],
     queryFn: getForums,
@@ -150,22 +133,16 @@ function App() {
     if (forumId !== undefined) {
       cs.push({
         id: "forum",
-        label: t("meta_forum"),
+        label: t.metaForum,
         value: selectedForum ? leafName(selectedForum.name) : `#${forumId}`,
-        // Full breadcrumb (top → mid → leaf) goes into the tooltip so
-        // truncated chips still expose the whole path on hover. The raw
-        // dump uses " - " as the level separator; swap to " → " for the
-        // tooltip so it reads as a real path, not three dashed phrases.
+        // The tooltip carries the whole path a truncated chip cuts off.
         tooltip: selectedForum?.name.replace(/ - /g, " → "),
       });
     }
     return cs;
   }, [forumId, selectedForum, t]);
 
-  // Favorites are sorted client-side via the same SortControl. relevance maps
-  // to "newest added first" because relevance has no meaning outside of a
-  // text search. We sort over a *copy* so the underlying favorites array
-  // (used by the Header counter etc.) stays stable.
+  // Favourites are sorted here, on a copy; relevance means newest starred first.
   const sortedFavs = useMemo(() => {
     if (!isFavView) return favItems;
     const arr = favItems.slice();
@@ -182,10 +159,8 @@ function App() {
   }, [isFavView, favItems, sort.key, sort.dir]);
 
   const total = isFavView ? favCount : data?.total ?? 0;
-  // Clamp the cursor to the last page that still has data. Unstarring the
-  // only item on the last favorites page shrinks the list under a stale
-  // `page` — without the clamp that rendered a false "no favorites" state
-  // with the pagination gone, leaving no way back to the surviving items.
+  // Clamped to the last page that still has rows: unstarring the last item of
+  // the last page would otherwise show an empty list with no way back.
   const lastPage = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1);
   const effPage = Math.min(page, lastPage);
   const items = isFavView
@@ -193,21 +168,16 @@ function App() {
     : data?.items ?? [];
   const showResults = hasFilter || isFavView;
 
-  // Sticky-meta stuck detection via a zero-height sentinel above it: once the
-  // sentinel scrolls past the header's bottom (rootMargin = -header height) it
-  // stops intersecting → toggle the bar styles. No per-frame scroll listener.
+  // Stuck is read off a zero-height sentinel above the meta row, not a
+  // scroll listener.
   const headerRef = useRef<HTMLElement | null>(null);
   const stickyRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const resultsPanelRef = useRef<HTMLDivElement | null>(null);
-  // isStuck is used to hide meta-row's top hairline when it's pinned under
-  // the header — otherwise the meta's top rule and the header's bottom rule
-  // sit at the same Y and visually thicken into a 2px line.
+  // Stuck, the meta row drops its top rule: it would double the header's.
   const [isStuck, setIsStuck] = useState(false);
 
-  // Pagination: scroll the results panel's top under the stuck meta-row so the
-  // new page's first card lands where the user left off (else they keep their
-  // bottom scroll and see only the tail, or get yanked up to the forum strip).
+  // A page change scrolls the list's top to just under the stuck meta row.
   const onPageChange = useCallback((newPage: number) => {
     setPage(newPage);
     requestAnimationFrame(() => {
@@ -221,10 +191,8 @@ function App() {
       window.scrollBy({ top: panelRect.top - target, behavior: "smooth" });
     });
   }, []);
-  // Observe the sentinel; when it leaves the top region the meta-row is stuck.
-  // Re-runs on showResults (the sentinel only mounts when results are visible).
-  // rootMargin is the header's measured height (two rows on mobile, one from
-  // sm up) + 1px slack; a ResizeObserver re-arms it when that height changes.
+  // The observer's margin is the header's measured height; a ResizeObserver
+  // re-arms it when the header changes rows.
   useEffect(() => {
     const node = sentinelRef.current;
     if (!node) return;
@@ -248,9 +216,7 @@ function App() {
   }, [showResults]);
 
   return (
-    // Flexbox sticky footer: root is a vertical column of the viewport
-    // height, <main> grows to absorb the slack, footer sits at the bottom
-    // whether the content is a tall result list or a single hero line.
+    // Header, a main that takes the slack, footer: the footer sits at the bottom.
     <div className="min-h-svh flex flex-col">
       <Header
         ref={headerRef}
@@ -267,9 +233,7 @@ function App() {
           setPage(0);
           setDrawerOpen(false);
           setFavOnly(false);
-          // Full strip reset: panel closed + all expanded categories
-          // dropped. localStorage write happens before the remount so the
-          // strip reads "closed" on its fresh mount.
+          // ForumStrip reads this key on mount: write it before the remount below.
           localStorage.setItem(STRIP_OPEN_KEY, "false");
           setForumsResetKey((k) => k + 1);
           window.scrollTo({ top: 0, behavior: "smooth" });
@@ -279,10 +243,7 @@ function App() {
       <main className="flex-1 w-full mx-auto max-w-[1400px] px-6 sm:px-10 lg:px-16 pb-[env(safe-area-inset-bottom)]">
         {/* Forums + stats above everything — Swiss strip with hairlines, no
             outer panel. Lives flush against the header. */}
-        {/* key={forumsResetKey} — bumping it forces a remount which
-            collapses any expanded top/mid sections. Cheaper than lifting
-            the expansion state into App; forum + stats queries are cached
-            with staleTime:Infinity so no refetch happens on remount. */}
+        {/* A new key remounts the strip, which folds its open sections. */}
         <ForumStrip
           key={forumsResetKey}
           selectedForumId={forumId}
@@ -294,7 +255,7 @@ function App() {
         {!showResults && (
           <div className="pt-12 sm:pt-20 pb-8 sm:pb-12">
             <h1
-              aria-label={t("hero_find_something")}
+              aria-label={t.heroFindSomething}
               className="flex flex-wrap gap-x-[0.25em] gap-y-2 leading-none select-none text-[40px] sm:text-[64px] lg:text-[88px]"
             >
               {HERO_EMOJI.map((e) => (
@@ -306,16 +267,7 @@ function App() {
           </div>
         )}
 
-        {/* Sticky meta-row — flat hairline rectangle. At rest it sits in
-            the flow; once the sentinel above scrolls past the header's
-            bottom, position:sticky pins it. Top rule is dropped while
-            stuck so it doesn't stack with the header's bottom rule into
-            a visibly thicker 2px line — see isStuck below. */}
-        {/* Sentinel + sticky meta-row. Animation is a CSS keyframe (see
-            index.css `.swiss-meta-enter`) — runs on the compositor and
-            doesn't drop frames when React commits ~25 ResultCards on the
-            same tick. Sentinel is rendered as a sibling so the
-            IntersectionObserver still has a stable mount point. */}
+        {/* The sentinel is a sibling, so the observer has a stable node to watch. */}
         {showResults && (
           <>
             <div ref={sentinelRef} aria-hidden="true" className="h-0 w-full" />
@@ -323,42 +275,30 @@ function App() {
               ref={stickyRef}
               className={cn(
                 "sticky z-20 swiss-meta-enter",
-                // Full hairline outline — left/right/bottom always, top
-                // dropped when stuck under the header (header's own bottom
-                // rule provides that edge, otherwise the two 1px lines
-                // would stack into a visibly thicker line).
+                // The top rule is dropped while stuck: it would double the header's.
                 "border-[var(--color-rule)]",
                 "border-x border-b border-t",
-                // Docking animates: radius/border/bg/shadow tween 300 ms instead
-                // of snapping. Top border is always present but fades transparent
-                // when stuck (border-width isn't animatable, border-color is).
+                // The top border stays and fades: a width cannot be animated, a colour can.
                 "transition-[border-radius,box-shadow,background-color,border-color,backdrop-filter] duration-300 ease-out",
-                // Top corners soft only while floating; flush/square when stuck.
-                // Bottom square while the list continues below (its last card
-                // rounds it) — but a zero-row meta is standalone and closes itself.
+                // Top corners are round only while the row floats; an empty list rounds
+                // the bottom as well.
                 isStuck ? "border-t-transparent rounded-t-none" : "rounded-t-md",
                 items.length === 0 && "rounded-b-md",
                 "top-[calc(env(safe-area-inset-top)+var(--header-h))]",
-                // Stuck: near-opaque frosted bg — the list scrolling away
-                // beneath shows through faintly blurred — plus a soft drop
-                // shadow so the row reads as floating above the rows.
+                // Frosted only while the list is under it.
                 isStuck
                   ? "bg-[var(--color-paper)]/85 backdrop-blur-xs shadow-[var(--shadow-header)]"
                   : "bg-[var(--color-paper)]",
               )}
             >
-              {/* Below lg the row stacks into counts / controls, split by an
-                  inset hairline; lg:contents dissolves the wrapper so wide
-                  viewports keep the original single row. The breakpoint is lg,
-                  not sm: at sm the Russian labels still overflow and wrapped
-                  into two rows with no divider between them. */}
+              {/* Two rows below lg, one from lg: at sm the Russian labels still overflow. */}
               <div className="flex flex-col lg:flex-row lg:items-center lg:flex-nowrap gap-x-3 py-3 px-3 sm:px-4">
                 <div className="flex items-center flex-nowrap gap-x-3 pb-2.5 lg:pb-0 lg:contents">
                 <p className="text-[12px] text-[var(--color-ink-soft)] shrink-0 tabular-nums">
                   {isFavView ? (
                     <>
                       <span className="swiss-eyebrow text-[var(--color-accent)] mr-2">
-                        {t("favorites_title")}
+                        {t.favoritesTitle}
                       </span>
                       <span className="text-[var(--color-rule)] mr-2">/</span>
                       <span className="font-medium text-[var(--color-ink)]">
@@ -376,7 +316,7 @@ function App() {
                               control at the bottom of the list repeats it. */}
                           <span className="hidden lg:inline">
                             <span className="text-[var(--color-rule)] mx-2">/</span>
-                            {t("pagination_page")}{" "}
+                            {t.paginationPage}{" "}
                             <span className="font-medium text-[var(--color-ink)]">
                               {effPage + 1}/{Math.max(1, Math.ceil(total / PAGE_SIZE))}
                             </span>
@@ -385,7 +325,7 @@ function App() {
                       )}
                     </>
                   ) : isFetching && !data ? (
-                    t("searching")
+                    t.searching
                   ) : (
                     <>
                       <span className="font-medium text-[var(--color-ink)]">
@@ -403,7 +343,7 @@ function App() {
                               control at the bottom of the list repeats it. */}
                           <span className="hidden lg:inline">
                             <span className="text-[var(--color-rule)] mx-2">/</span>
-                            {t("pagination_page")}{" "}
+                            {t.paginationPage}{" "}
                             <span className="font-medium text-[var(--color-ink)]">
                               {effPage + 1}/{Math.max(1, Math.ceil(total / PAGE_SIZE))}
                             </span>
@@ -418,9 +358,7 @@ function App() {
                     <span className="text-[var(--color-rule)] text-[14px] shrink-0">
                       /
                     </span>
-                    {/* lg:flex-initial, not flex-none: the chip takes its
-                        natural width and only shrinks when the row is full,
-                        so ml-auto still parks the sort control on the right. */}
+                    {/* From lg the chip keeps its own width and shrinks only in a full row. */}
                     <div className="min-w-0 flex-1 lg:flex-initial">
                       <FilterChips
                         chips={chips}
@@ -450,13 +388,13 @@ function App() {
                       <button
                         type="button"
                         onClick={() => setConfirmClear(true)}
-                        aria-label={t("favorites_clear_all")}
+                        aria-label={t.favoritesClearAll}
                         className="swiss-eyebrow hover:text-[var(--color-accent)] transition-colors duration-150"
                       >
                         {/* Icon-only below lg: the Russian label is 131px and
                             would not fit next to the sort options. */}
                         <Trash2 className="size-3.5 lg:hidden" />
-                        <span className="hidden lg:inline">{t("favorites_clear_all")}</span>
+                        <span className="hidden lg:inline">{t.favoritesClearAll}</span>
                       </button>
                     </>
                   )}
@@ -468,18 +406,12 @@ function App() {
 
         {error && (
           <div className="my-4 p-4 text-[13px] border-l-2 border-[var(--color-down)] bg-[var(--color-down)]/5 text-[var(--color-ink-soft)] rounded-md">
-            {t("error_prefix")}
-            {error instanceof Error ? error.message : t("error_generic")}
+            {t.errorPrefix}
+            {error instanceof Error ? error.message : t.errorGeneric}
           </div>
         )}
 
-        {/* Swiss results panel — no rounded outer surface. Just a flat
-            container; the cards inside provide their own hairline rules.
-            Entry fade is a CSS keyframe (see index.css
-            `.swiss-results-enter`) with a 120 ms delay so the meta-row's
-            slide-in plays first and the cards proper land on already-
-            settled meta. CSS keeps animation on the compositor thread,
-            so the heavy card-render commit can't drop frames here. */}
+        {/* The cards fade in after the meta row has slid into place. */}
         <div ref={resultsPanelRef}>
           {showResults ? (
             <div className="swiss-results-enter">
@@ -499,7 +431,7 @@ function App() {
               )}
               {!isFavView && !isFetching && items.length === 0 && !error && (
                 <div className="py-12 text-center text-[var(--color-ink-muted)] text-[14px]">
-                  {t("no_results")}
+                  {t.noResults}
                 </div>
               )}
               <Pagination
@@ -526,9 +458,9 @@ function App() {
 
       <ConfirmDialog
         open={confirmClear}
-        title={t("favorites_clear_all")}
-        body={t("favorites_clear_confirm")}
-        confirmLabel={t("favorites_clear_all")}
+        title={t.favoritesClearAll}
+        body={t.favoritesClearConfirm}
+        confirmLabel={t.favoritesClearAll}
         onConfirm={() => {
           clearFavs();
           setPage(0);
@@ -549,10 +481,10 @@ function EmptyState() {
     <div className="swiss-rule-top py-8 sm:py-10 max-w-[42rem]">
       <div className="swiss-eyebrow mb-3 flex items-center gap-2">
         <Search className="size-3.5" strokeWidth={2.25} />
-        <span>{t("empty_title")}</span>
+        <span>{t.emptyTitle}</span>
       </div>
       <p className="text-[14px] text-[var(--color-ink-soft)] leading-relaxed">
-        {t("empty_hint")}
+        {t.emptyHint}
       </p>
     </div>
   );
@@ -564,10 +496,10 @@ function EmptyFavorites() {
     <div className="py-12 max-w-[42rem]">
       <div className="swiss-eyebrow mb-3 flex items-center gap-2 text-[var(--color-accent)]">
         <Star className="size-3.5" strokeWidth={2.25} fill="currentColor" />
-        <span>{t("favorites_empty_title")}</span>
+        <span>{t.favoritesEmptyTitle}</span>
       </div>
       <p className="text-[14px] text-[var(--color-ink-soft)] leading-relaxed">
-        {t("favorites_empty_hint")}
+        {t.favoritesEmptyHint}
       </p>
     </div>
   );

@@ -2,16 +2,13 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { getJSON, sendOK, type Torrent } from "./api";
 
-// Server-side global favorites (shared service, no per-user accounts → one set).
-// On first mount we migrate any leftover localStorage items up to the server and
-// clear the local copy so a future browser change can't resurrect old picks.
+// Favourites live on the server, one set for everyone. Items left in
+// localStorage by an older version are uploaded once and removed.
 
 const STORAGE_KEY = "rt_favorites";
 
 export type FavoriteItem = Torrent & {
-  // ISO 8601 from the server (added_at). The legacy localStorage shape stored
-  // an `addedAt` epoch number — kept here as a separate optional field for
-  // the one-shot migration path.
+  // ISO 8601, from the server.
   added_at: string;
 };
 
@@ -34,10 +31,8 @@ async function apiClear(): Promise<void> {
   await sendOK("/api/favorites", "DELETE");
 }
 
-// One-shot migration of legacy localStorage favorites. Best-effort: any
-// per-id POST that fails (network blip, swept torrent → FK violation) is
-// dropped silently so the user isn't blocked by a half-broken upload. After
-// a successful sweep across the list we clear the key so we don't try again.
+// Best effort: an id that fails to upload is dropped, and the key is
+// cleared after the pass so it does not run again.
 async function migrateLegacyLocal(): Promise<boolean> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -63,15 +58,11 @@ async function migrateLegacyLocal(): Promise<boolean> {
   }
 }
 
-// Module-level so the migration really runs once per tab. A useRef guard
-// (the previous shape) is per-hook-instance — Header, App and every star
-// mount their own copy, and on startup several of them raced the localStorage
-// read before any had removed the key, double-POSTing every legacy id.
+// Module-level: the migration runs once per tab, not once per hook instance.
 let migrationStarted = false;
 
-// Optimistic-update helper: snapshot the list, apply the mutator locally, return
-// a rollback fn. Stays synchronous — TanStack onMutate runs before the mutation
-// fn and must return without awaiting; the network call is the caller's job.
+// Snapshots the list, applies the change, returns a rollback. Synchronous:
+// onMutate must return before the request starts.
 function optimisticUpdate(
   qc: QueryClient,
   mutator: (cur: FavoriteItem[]) => FavoriteItem[],
@@ -81,9 +72,8 @@ function optimisticUpdate(
   return () => qc.setQueryData(["favorites"], prev);
 }
 
-// Membership-only subscription for the star buttons. `select` narrows the
-// shared ["favorites"] cache entry down to one boolean, so a star re-renders
-// only when *its* membership flips — not 25 cards on every list change.
+// One boolean off the shared list: a star renders only when its own
+// membership flips.
 export function useIsFavorite(id: number): boolean {
   const { data } = useQuery({
     queryKey: ["favorites"],
@@ -97,10 +87,8 @@ export function useIsFavorite(id: number): boolean {
   return data ?? false;
 }
 
-// Add/remove mutations without a list subscription — membership is read from
-// the query cache at call time. The optimistic update is exact, so success
-// doesn't re-fetch; only an error invalidates to re-sync with server truth
-// after the rollback.
+// Mutations without a list subscription. The optimistic update is exact,
+// so only an error refetches.
 export function useFavoriteToggle() {
   const qc = useQueryClient();
 
@@ -146,9 +134,8 @@ export function useFavoriteToggle() {
   );
 }
 
-// Full-list hook for App (favorites view) and Header (counter). Star buttons
-// should use useIsFavorite/useFavoriteToggle instead — they don't need the
-// whole list re-rendering them.
+// The whole list, for the favourites view and the header's counter; a star
+// uses useIsFavorite and useFavoriteToggle.
 export function useFavorites() {
   const qc = useQueryClient();
 
@@ -157,10 +144,8 @@ export function useFavorites() {
     queryFn: apiList,
     staleTime: 30_000,
   });
-  // Stable identity per data reference — a bare `data ?? []` returns a fresh
-  // empty array on every render while data is undefined, which makes every
-  // downstream useCallback that depends on `items` (isFavorite) churn its
-  // identity too. useMemo pins it to the same reference until data flips.
+  // One reference while data is undefined: a fresh [] on every render would
+  // churn every callback that depends on items.
   const items: FavoriteItem[] = useMemo(() => data ?? [], [data]);
 
   useEffect(() => {

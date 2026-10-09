@@ -11,9 +11,8 @@ type Props = {
   size?: "card" | "drawer";
 };
 
-// Swiss favorite — plain icon button (card unframed, drawer framed to match the
-// action-row). Subscribes to its own boolean (useIsFavorite) so one toggle
-// doesn't re-render the other 24 stars.
+// An icon button: bare in a card, framed in the drawer. Subscribes to its own
+// boolean, so one toggle does not render the other stars.
 export function FavoriteStar({ torrent, size = "card" }: Props) {
   const active = useIsFavorite(torrent.id);
   const toggle = useFavoriteToggle();
@@ -32,7 +31,7 @@ export function FavoriteStar({ torrent, size = "card" }: Props) {
   const btnSize = isDrawer ? "size-11" : "size-6";
   const iconSize = isDrawer ? "size-4" : "size-3.5";
 
-  const label = active ? t("favorites_remove_aria") : t("favorites_add_aria");
+  const label = active ? t.favoritesRemoveAria : t.favoritesAddAria;
   return (
     <Tooltip text={label}>
     <button

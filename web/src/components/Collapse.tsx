@@ -2,8 +2,7 @@ import type { ReactNode } from "react";
 import { cn } from "../lib/cn";
 
 // A body that folds both ways: the grid row animates between 1fr and 0fr, so
-// the content's height is tweened without measuring it. Stays mounted while
-// folded; `inert` keeps it out of the tab order.
+// no height is measured. Stays mounted; `inert` keeps it out of the tab order.
 export function Collapse({
   open,
   children,

@@ -106,7 +106,7 @@ export function Header({
             <input
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
-              placeholder={t("search_placeholder")}
+              placeholder={t.searchPlaceholder}
               name="search"
               autoComplete="off"
               className="flex-1 min-w-0 bg-transparent outline-none placeholder:text-[var(--color-ink-muted)] text-[14px]"
@@ -115,7 +115,7 @@ export function Header({
               <button
                 type="button"
                 onClick={() => onQueryChange("")}
-                aria-label={t("search_clear_aria")}
+                aria-label={t.searchClearAria}
                 className={cn(
                   "size-6 grid place-items-center shrink-0",
                   "text-[var(--color-ink-muted)]",
@@ -132,7 +132,7 @@ export function Header({
         <div className="order-2 sm:order-none ml-auto sm:ml-0 flex items-center shrink-0 lg:justify-self-end">
           <HeaderButton
             onClick={onToggleFavOnly}
-            ariaLabel={t("favorites_toggle_aria")}
+            ariaLabel={t.favoritesToggleAria}
             pressed={favOnly}
           >
             <Star
@@ -141,7 +141,7 @@ export function Header({
               fill={favOnly ? "currentColor" : "none"}
             />
             <span className="hidden sm:inline">
-              {t("favorites_title")}
+              {t.favoritesTitle}
             </span>
             {favCount > 0 && (
               <span className="tabular-nums text-[var(--color-ink-muted)] ml-0.5">
@@ -154,7 +154,7 @@ export function Header({
 
           <HeaderButton
             onClick={onOpenAdmin}
-            ariaLabel={t("admin_open_aria")}
+            ariaLabel={t.adminOpenAria}
           >
             <Database className="size-3.5" strokeWidth={2} />
           </HeaderButton>

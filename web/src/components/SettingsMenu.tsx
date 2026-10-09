@@ -5,15 +5,15 @@ import { useTheme, type Palette, type Theme } from "../lib/useTheme";
 import { Tooltip } from "./Tooltip";
 import { cn } from "../lib/cn";
 
-const THEMES: { id: Theme; icon: LucideIcon; label: keyof Dict }[] = [
-  { id: "system", icon: Monitor, label: "theme_system" },
-  { id: "light", icon: Sun, label: "theme_light" },
-  { id: "dark", icon: Moon, label: "theme_dark" },
+const THEMES: { id: Theme; icon: LucideIcon; label: (t: Dict) => string }[] = [
+  { id: "system", icon: Monitor, label: (t) => t.themeSystem },
+  { id: "light", icon: Sun, label: (t) => t.themeLight },
+  { id: "dark", icon: Moon, label: (t) => t.themeDark },
 ];
 
-const PALETTES: { id: Palette; label: keyof Dict }[] = [
-  { id: "classic", label: "palette_classic" },
-  { id: "warm", label: "palette_warm" },
+const PALETTES: { id: Palette; label: (t: Dict) => string }[] = [
+  { id: "classic", label: (t) => t.paletteClassic },
+  { id: "warm", label: (t) => t.paletteWarm },
 ];
 
 const ROW = cn(
@@ -49,10 +49,10 @@ export function SettingsMenu() {
   return (
     // The 13px pull puts the icon's edge, not the button's, on the column's end.
     <div ref={rootRef} className="relative shrink-0 -ml-[13px] -mr-[13px]">
-      <Tooltip text={t("settings")} suppressed={open} side="bottom" align="end">
+      <Tooltip text={t.settings} suppressed={open} side="bottom" align="end">
         <button
           type="button"
-          aria-label={t("settings")}
+          aria-label={t.settings}
           aria-expanded={open}
           aria-haspopup="true"
           onClick={() => setOpen((o) => !o)}
@@ -76,18 +76,18 @@ export function SettingsMenu() {
         )}
       >
         <div className="swiss-eyebrow mb-1" id="settings-theme">
-          {t("theme")}
+          {t.theme}
         </div>
         <div role="radiogroup" aria-labelledby="settings-theme" className="flex items-center -ml-2.5">
           {THEMES.map(({ id, icon: Icon, label }, i) => (
             <Fragment key={id}>
               {i > 0 && <span aria-hidden="true" className="w-px h-4 bg-[var(--color-rule)]" />}
-              <Tooltip text={t(label)} side="bottom">
+              <Tooltip text={label(t)} side="bottom">
                 <button
                   type="button"
                   role="radio"
                   aria-checked={theme === id}
-                  aria-label={t(label)}
+                  aria-label={label(t)}
                   onClick={() => setTheme(id)}
                   className={cn(
                     "size-9 grid place-items-center rounded-md cursor-pointer transition-colors duration-150",
@@ -104,7 +104,7 @@ export function SettingsMenu() {
         </div>
 
         <div className="swiss-eyebrow mt-3 mb-1" id="settings-palette">
-          {t("palette")}
+          {t.palette}
         </div>
         <div role="radiogroup" aria-labelledby="settings-palette">
           {PALETTES.map(({ id, label }) => (
@@ -116,14 +116,14 @@ export function SettingsMenu() {
               onClick={() => setPalette(id)}
               className={ROW}
             >
-              {t(label)}
+              {label(t)}
               {palette === id && <Check aria-hidden="true" className="size-4 shrink-0 text-[var(--color-accent)]" />}
             </button>
           ))}
         </div>
 
         <div className="swiss-eyebrow mt-3 mb-1" id="settings-language">
-          {t("language")}
+          {t.language}
         </div>
         <div role="radiogroup" aria-labelledby="settings-language">
           {LANGS.map(({ id, name }) => (

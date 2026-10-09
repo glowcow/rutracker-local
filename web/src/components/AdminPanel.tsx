@@ -24,9 +24,8 @@ type Props = {
 
 const BATCH_SIZES = [250, 500, 1000];
 
-// AdminPanel — the in-app "load a dump" control. Read data (dumps / recent runs
-// / live progress+logs via SSE) is open; starting a parse needs the token. The
-// parse runs server-side, so progress survives reload / other devices.
+// The in-app dump loader. Reading is open; starting a parse needs the token.
+// The parse runs on the server, so progress survives a reload.
 export function AdminPanel({ open, onClose }: Props) {
   const { t, locale } = useLang();
 
@@ -99,15 +98,13 @@ export function AdminPanel({ open, onClose }: Props) {
     } catch (e) {
       const code = e instanceof Error ? e.message : "";
       setStartErr(
-        t(
-          code === "conflict"
-            ? "admin_err_conflict"
-            : code === "unauthorized"
-              ? "admin_err_unauthorized"
-              : code === "disabled"
-                ? "admin_err_disabled"
-                : "admin_err_generic",
-        ),
+        code === "conflict"
+          ? t.adminErrConflict
+          : code === "unauthorized"
+            ? t.adminErrUnauthorized
+            : code === "disabled"
+              ? t.adminErrDisabled
+              : t.adminErrGeneric,
       );
     }
   };
@@ -151,14 +148,14 @@ export function AdminPanel({ open, onClose }: Props) {
           {/* Header */}
           <div className="flex items-center justify-between px-5 sm:px-6 h-14 sm:h-16 shrink-0 swiss-rule">
             <div className="swiss-eyebrow">
-              {t("admin_title")} /{" "}
+              {t.adminTitle} /{" "}
               <span className="normal-case text-[var(--color-ink-muted)]">
-                {t("admin_subtitle")}
+                {t.adminSubtitle}
               </span>
             </div>
             <button
               onClick={onClose}
-              aria-label={t("admin_close")}
+              aria-label={t.adminClose}
               className={cn(
                 "size-10 grid place-items-center -mr-2",
                 "text-[var(--color-ink-soft)]",
@@ -176,28 +173,26 @@ export function AdminPanel({ open, onClose }: Props) {
             {token ? (
               <div className="flex items-center gap-2 text-[12px] text-[var(--color-ink-muted)]">
                 <KeyRound className="size-3.5 text-[var(--color-accent)]" />
-                <span>{t("admin_token_saved")}</span>
+                <span>{t.adminTokenSaved}</span>
                 <span className="text-[var(--color-rule)]">·</span>
                 <button
                   onClick={changeToken}
                   className="swiss-eyebrow hover:text-[var(--color-accent)] transition-colors"
                 >
-                  {t("admin_token_change")}
+                  {t.adminTokenChange}
                 </button>
               </div>
             ) : (
-              <Field label={t("admin_token")}>
+              <Field label={t.adminToken}>
                 <div className="flex gap-2">
                   <input
                     type="password"
                     value={tokenDraft}
                     onChange={(e) => setTokenDraft(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && saveToken()}
-                    placeholder={t("admin_token_placeholder")}
-                    // Not a login form: `new-password` stops Chrome from
-                    // offering saved passwords here and from autofilling a
-                    // "username" into the nearest text field (the header
-                    // search). data-*-ignore silences 1Password/LastPass too.
+                    placeholder={t.adminTokenPlaceholder}
+                    // Not a login form: new-password keeps Chrome from offering saved passwords
+                    // and from autofilling the header search; data-*-ignore quiets 1Password.
                     autoComplete="new-password"
                     data-1p-ignore="true"
                     data-lpignore="true"
@@ -217,17 +212,17 @@ export function AdminPanel({ open, onClose }: Props) {
                       "hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-colors",
                     )}
                   >
-                    {t("admin_token_save")}
+                    {t.adminTokenSave}
                   </button>
                 </div>
               </Field>
             )}
 
             {/* Dump */}
-            <Field label={t("admin_dump")}>
+            <Field label={t.adminDump}>
               {dumps.length === 0 ? (
                 <div className="text-[13px] text-[var(--color-ink-muted)]">
-                  {t("admin_no_dumps")}
+                  {t.adminNoDumps}
                 </div>
               ) : (
                 <DumpSelect dumps={dumps} value={source} onChange={setSource} disabled={running} />
@@ -235,12 +230,12 @@ export function AdminPanel({ open, onClose }: Props) {
             </Field>
 
             {/* Batch size */}
-            <Field label={t("admin_batch")}>
+            <Field label={t.adminBatch}>
               <Segmented options={BATCH_SIZES} value={batchSize} onChange={setBatchSize} disabled={running} />
             </Field>
 
             {/* Sweep */}
-            <Field label={t("admin_sweep")}>
+            <Field label={t.adminSweep}>
               <div className="flex items-start gap-3">
                 <Toggle checked={sweep} onChange={setSweep} disabled={running} />
                 <p
@@ -251,7 +246,7 @@ export function AdminPanel({ open, onClose }: Props) {
                       : "text-[var(--color-ink-muted)]",
                   )}
                 >
-                  {t("admin_sweep_hint")}
+                  {t.adminSweepHint}
                 </p>
               </div>
             </Field>
@@ -271,12 +266,12 @@ export function AdminPanel({ open, onClose }: Props) {
               >
                 <span className="flex items-center gap-2">
                   {running ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
-                  {running ? t("admin_running") : t("admin_start")}
+                  {running ? t.adminRunning : t.adminStart}
                 </span>
               </button>
               {!token && (
                 <p className="mt-2 text-[11.5px] text-[var(--color-ink-muted)] text-center">
-                  {t("admin_token_required")}
+                  {t.adminTokenRequired}
                 </p>
               )}
               {startErr && (
@@ -287,10 +282,10 @@ export function AdminPanel({ open, onClose }: Props) {
             {/* Recent loads — shown on the idle view; the live zone replaces it. */}
             {status === "idle" && (
               <div className="swiss-rule-top pt-5 space-y-2">
-                <div className="swiss-eyebrow">{t("admin_recent")}</div>
+                <div className="swiss-eyebrow">{t.adminRecent}</div>
                 {recent.length === 0 ? (
                   <div className="text-[12px] text-[var(--color-ink-muted)]">
-                    {t("admin_no_runs")}
+                    {t.adminNoRuns}
                   </div>
                 ) : (
                   <div className="rounded-md border border-[var(--color-rule)] divide-y divide-[var(--color-rule)]">
@@ -309,7 +304,7 @@ export function AdminPanel({ open, onClose }: Props) {
                   <StatusPill status={status} />
                   {progress && (
                     <span className="text-[12px] tabular-nums text-[var(--color-ink-muted)]">
-                      {t("admin_elapsed")} {fmtDur(progress.elapsed_s)}
+                      {t.adminElapsed} {fmtDur(progress.elapsed_s)}
                     </span>
                   )}
                 </div>
@@ -322,7 +317,7 @@ export function AdminPanel({ open, onClose }: Props) {
                     </span>
                     {progress && status === "running" && (
                       <span className="text-[12px] tabular-nums text-[var(--color-ink-muted)]">
-                        {t("admin_eta")} {fmtDur(progress.eta_s)}
+                        {t.adminEta} {fmtDur(progress.eta_s)}
                       </span>
                     )}
                   </div>
@@ -340,15 +335,15 @@ export function AdminPanel({ open, onClose }: Props) {
                 {/* Stats */}
                 {progress && (
                   <div className="grid grid-cols-3 divide-x divide-[var(--color-rule)]">
-                    <Stat label={t("admin_rows")} value={progress.rows.toLocaleString(locale)} />
+                    <Stat label={t.adminRows} value={progress.rows.toLocaleString(locale)} />
                     <Stat label="MB" value={`${progress.read_mb} / ${progress.total_mb}`} />
-                    <Stat label={t("admin_rate")} value={progress.rate_rows_s.toLocaleString(locale)} />
+                    <Stat label={t.adminRate} value={progress.rate_rows_s.toLocaleString(locale)} />
                   </div>
                 )}
 
                 {/* Logs */}
                 <div>
-                  <div className="swiss-eyebrow mb-2">{t("admin_logs")}</div>
+                  <div className="swiss-eyebrow mb-2">{t.adminLogs}</div>
                   <div
                     ref={logBoxRef}
                     className={cn(
@@ -408,9 +403,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-// Custom dropdown — the native <select> popup is OS-rendered (dark system menu
-// on macOS) and un-styleable, which clashes with the flat Swiss look. This is
-// a button + own popup list: click-outside and Escape close it.
+// A button with its own list: the native select's popup cannot be styled.
+// Closes on a click outside and on Escape.
 function DumpSelect({
   dumps,
   value,
@@ -610,7 +604,7 @@ function RunRow({ run }: { run: RunSummary }) {
       </div>
       <div className="text-right tabular-nums shrink-0 leading-tight">
         <div className="font-medium">
-          {run.rows.toLocaleString(locale)} {t("admin_rows")}
+          {run.rows.toLocaleString(locale)} {t.adminRows}
         </div>
         <div className="text-[var(--color-ink-muted)]">
           {run.sweep && <>sweep −{run.swept.toLocaleString(locale)} · </>}
@@ -625,22 +619,22 @@ function StatusPill({ status }: { status: ParseStatus }) {
   const { t } = useLang();
   const map: Record<ParseStatus, { label: string; dot: string; text: string }> = {
     idle: {
-      label: t("admin_status_idle"),
+      label: t.adminStatusIdle,
       dot: "bg-[var(--color-ink-muted)]",
       text: "text-[var(--color-ink-muted)]",
     },
     running: {
-      label: t("admin_status_running"),
+      label: t.adminStatusRunning,
       dot: "bg-[var(--color-accent)] animate-pulse",
       text: "text-[var(--color-accent)]",
     },
     succeeded: {
-      label: t("admin_status_succeeded"),
+      label: t.adminStatusSucceeded,
       dot: "bg-[var(--color-up)]",
       text: "text-[var(--color-up)]",
     },
     failed: {
-      label: t("admin_status_failed"),
+      label: t.adminStatusFailed,
       dot: "bg-[var(--color-down)]",
       text: "text-[var(--color-down)]",
     },

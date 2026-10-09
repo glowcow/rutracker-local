@@ -5,36 +5,29 @@ import { useLang, type Dict } from "../lib/i18n";
 import type { PeersError, PeersState } from "../lib/peers";
 import { MetaLabel } from "./MetaRow";
 
-// Live seeders/leechers layer (values from the 24h-TTL torrent_peers cache).
-// Colour: seeders green / leechers red = trusted/current; both grey = a refresh
-// was attempted and FAILED (value known-unreliable). Grey is driven by `error`,
-// not age — a 5h-old cache we didn't re-fetch stays coloured.
-
-type TFn = (k: keyof Dict) => string;
+// Seeders in `up`, leechers in `down` while the value is current; both grey
+// when a refresh was tried and failed — by `error`, not by age.
 
 const greyCls = "text-[var(--color-ink-muted)]";
 
 // "только что" / "5 ч назад" — short units so no RU pluralisation is needed.
-function timeAgo(iso: string, t: TFn): string {
+function timeAgo(iso: string, t: Dict): string {
   const min = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
-  if (min < 1) return t("peers_now");
-  if (min < 60) return `${min} ${t("peers_min")} ${t("peers_ago")}`;
+  if (min < 1) return t.peersNow;
+  if (min < 60) return `${min} ${t.peersMin} ${t.peersAgo}`;
   const h = Math.floor(min / 60);
-  if (h < 24) return `${h} ${t("peers_hour")} ${t("peers_ago")}`;
-  return `${Math.floor(h / 24)} ${t("peers_day")} ${t("peers_ago")}`;
+  if (h < 24) return `${h} ${t.peersHour} ${t.peersAgo}`;
+  return `${Math.floor(h / 24)} ${t.peersDay} ${t.peersAgo}`;
 }
 
-function reasonLabel(error: PeersError | null, t: TFn): string {
-  if (error === "auth") return t("peers_err_auth");
-  if (error === "unavailable") return t("peers_err_unavailable");
-  return t("peers_stale");
+function reasonLabel(error: PeersError | null, t: Dict): string {
+  if (error === "auth") return t.peersErrAuth;
+  if (error === "unavailable") return t.peersErrUnavailable;
+  return t.peersStale;
 }
 
-// The ↑seeders ↓leechers pair. `grey` desaturates both to signal a stale
-// (failed-refresh) value.
-// Icon shared class: inline + em-sized so it scales with the inherited font,
-// nudged down onto the digits' baseline so the whole thing reads as one line
-// of text (not a flex box that floats above the caption beside it).
+// Inline and em-sized, so the icons scale with the text and sit on the
+// digits' baseline as one line.
 const numIcon = "inline size-[1.05em] align-[-0.15em]";
 
 function Numbers({ seeders, leechers, grey }: { seeders: number; leechers: number; grey?: boolean }) {
@@ -71,12 +64,12 @@ export function PeerStatsRow({ state }: { state: PeersState }) {
     lead = (
       <span className={greyCls}>
         <Loader2 className={cn(numIcon, "mr-1.5 animate-spin")} />
-        {t("peers_loading")}
+        {t.peersLoading}
       </span>
     );
   } else if (state.loading && has) {
     lead = <Numbers seeders={state.seeders!} leechers={state.leechers!} grey />;
-    caption = t("peers_loading");
+    caption = t.peersLoading;
   } else if (!has) {
     // Nothing cached and (if error) the fresh fetch failed too.
     lead = <span className={greyCls}>—</span>;
@@ -88,14 +81,14 @@ export function PeerStatsRow({ state }: { state: PeersState }) {
   } else {
     // Live/current value.
     lead = <Numbers seeders={state.seeders!} leechers={state.leechers!} />;
-    caption = `${t("peers_updated")} ${state.checkedAt ? timeAgo(state.checkedAt, t) : t("peers_now")}`;
+    caption = `${t.peersUpdated} ${state.checkedAt ? timeAgo(state.checkedAt, t) : t.peersNow}`;
   }
 
   return (
     // Two cells of the drawer's meta grid: numbers, then the freshness/reason
     // after a " / " separator (mirrors the drawer's "Торрент / #id" idiom).
     <>
-      <MetaLabel icon={<Users className="size-3.5" />} label={t("peers_label")} />
+      <MetaLabel icon={<Users className="size-3.5" />} label={t.peersLabel} />
       {/* One continuous inline line (not flex) — numbers, "/", and caption
           share a single text baseline; truncate clips the caption tail. */}
       <dd className="min-w-0 leading-5 truncate">
@@ -111,9 +104,8 @@ export function PeerStatsRow({ state }: { state: PeersState }) {
   );
 }
 
-// List variant — compact badge for the ResultCard right rail. The list only
-// ever reads cache (no fetch), so there's no loading state here; `stale`
-// greys a value we know is past its window.
+// The list's badge reads the cache only: no loading state; `stale` greys
+// a value past its window.
 export function PeerBadge({
   seeders,
   leechers,

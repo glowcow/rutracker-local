@@ -43,9 +43,8 @@ function buildTree(files: [string, number][]): Node[] {
   return toNodes(root, "");
 }
 
-// Directories first, then files, each alphabetically — the dump's own order is
-// already lost (encoding/xml splits <dir> and <file> into separate lists), so
-// a stable, predictable order beats a half-preserved one.
+// Directories first, then files, each by name: the dump's own order is lost
+// in parsing, and a predictable one beats a half-kept one.
 function toNodes(dir: Dir, prefix: string): Node[] {
   const byName = (a: { name: string }, b: { name: string }) =>
     a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });

@@ -66,7 +66,7 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   api:
-    image: glowcow/rutracker:v1.9.0   # pick a published version — no :latest tag
+    image: glowcow/rutracker:v1.9.1   # pick a published version — no :latest tag
     depends_on: [postgres]
     environment:
       POSTGRES_HOST:     postgres

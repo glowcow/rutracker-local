@@ -15,15 +15,12 @@ import { PeerStatsRow } from "./PeerStats";
 import { Tooltip } from "./Tooltip";
 
 type Props = {
-  // Last viewed torrent — App keeps it set after close so the drawer's
-  // content stays rendered while the CSS close transition plays; `open`
-  // alone drives visibility.
+  // The last viewed torrent: App keeps it after the close, so the content
+  // stays rendered through the closing transition.
   torrentId: number | null;
   open: boolean;
   onClose: () => void;
-  // When set, clicking the Forum row inside the drawer triggers this with
-  // the forum's id — App wires it to setForumId(+close) so the underlying
-  // list is filtered as soon as the drawer dismisses.
+  // A click on the forum row: App filters the list by that forum.
   onForumClick: (forumId: number) => void;
 };
 
@@ -32,9 +29,8 @@ type Props = {
 type TxState = "idle" | "sending" | "added" | "duplicate" | "error";
 
 export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) {
-  // `copiedFor` instead of a boolean: the indicator is tied to the torrent
-  // it was copied FROM, so reopening a different torrent within the 1.6 s
-  // window can't inherit a stale "Copied" state.
+  // The id the link was copied from, not a boolean: another torrent opened
+  // within the 1.6 s must not inherit "Copied".
   const [copiedFor, setCopiedFor] = useState<number | null>(null);
   const copiedTimer = useRef<number | null>(null);
   // Transmission send state, tied to the torrent it fired for (same reasoning
@@ -50,10 +46,8 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
     enabled: torrentId !== null,
   });
 
-  // File listing — collapsed by default (the description below is what most
-  // opens are for), so the tree is fetched only once someone expands it.
-  // Keyed by torrent id, like copiedFor/tx above: switching torrents collapses
-  // the section without an effect that resets state.
+  // Folded by default, so the tree is fetched only when someone opens it.
+  // Keyed by torrent id: another torrent folds it without an effect.
   const [filesOpenFor, setFilesOpenFor] = useState<number | null>(null);
   const filesOpen = torrentId !== null && filesOpenFor === torrentId;
   const {
@@ -71,9 +65,7 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
   const { data: stats } = useQuery({ queryKey: ["stats"], queryFn: getStats });
   const peersEnabled = stats?.peers_enabled ?? false;
 
-  // Live peers load independently so the detail (from local PG) paints
-  // instantly while the scrape — cache hit or a fresh rutracker fetch —
-  // resolves in the background.
+  // Peers load on their own: the detail paints at once, the scrape follows.
   const { data: peers } = useQuery({
     queryKey: ["peers", torrentId],
     queryFn: () => getPeers(torrentId!),
@@ -83,10 +75,7 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
     ? { ...peers, loading: false }
     : { configured: peersEnabled, seeders: null, leechers: null, checkedAt: null, error: null, loading: true };
 
-  // Transmission feature state — `configured` gates rendering the button;
-  // `online` (a live probe cached ~20s server-side) toggles active vs greyed.
-  // enabled:open + staleTime re-probe on each meaningful open, so a daemon
-  // moved elsewhere greys the button instead of failing on click.
+  // configured renders the button, online greys it; re-probed on each open.
   const { data: txStatus } = useQuery({
     queryKey: ["transmission-status"],
     queryFn: getTransmissionStatus,
@@ -96,10 +85,8 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
   const txConfigured = txStatus?.configured ?? false;
   const txOffline = txConfigured && !(txStatus?.online ?? false);
 
-  // Once a scrape resolves with numbers, patch every cached search page that
-  // holds this torrent so its zebra badge appears the moment the drawer
-  // closes — the list query is staleTime:Infinity and won't refetch on its own
-  // (this was why the row stayed empty until a manual page reload).
+  // Patch every cached list page that holds this torrent: the list never
+  // refetches by itself, and its badge would stay empty until a reload.
   useEffect(() => {
     if (torrentId === null || !peers || peers.seeders === null || peers.leechers === null) {
       return;
@@ -158,9 +145,8 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
     };
   }, [open]);
 
-  // Hash comes from the untrusted dump — only a clean 40-hex-char info-hash
-  // may reach the magnet link; anything else (extra &tr= params smuggled
-  // into the string, truncated values) hides the Download/magnet actions.
+  // The hash comes from the dump: only a clean 40-hex info-hash reaches the
+  // magnet link, anything else hides Download and magnet.
   const validHash = data ? /^[0-9a-f]{40}$/i.test(data.hash) : false;
   const magnet = data && validHash ? buildMagnet(data.hash, data.title) : "";
   const copied = copiedFor !== null && copiedFor === torrentId;
@@ -198,20 +184,15 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
   };
 
   return (
-    // Always mounted; open/close is pure CSS (see swiss-drawer classes).
-    // visibility:hidden in the closed state removes the subtree from
-    // hit-testing and the a11y tree, so no `inert` needed here.
+    // Always mounted, opened by CSS; closed, visibility takes it out of
+    // hit-testing and the accessibility tree.
     <div className={cn(open ? "swiss-drawer-open" : "swiss-drawer-closed")}>
-      {/* backdrop-blur fades with the backdrop's own opacity transition —
-          the filtered backdrop is part of the element's paint, so the blur
-          eases in/out together with the dim. */}
+      {/* The blur fades with the backdrop's own opacity. */}
       <div
         onClick={onClose}
         className="swiss-drawer-backdrop fixed inset-0 z-40 bg-[var(--color-scrim)] backdrop-blur-xs"
       />
-      {/* Centred modal. The outer grid handles centering at any viewport
-          size; inner card has max-w + max-h so it never spans the whole
-          screen even on huge monitors. */}
+      {/* Centred at any viewport size; the panel caps its own width and height. */}
       <div
         className={cn(
           "fixed inset-0 z-50 grid place-items-center",
@@ -238,11 +219,11 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
         >
               <div className="flex items-center justify-between px-5 sm:px-6 h-14 sm:h-16 shrink-0 swiss-rule">
                 <div className="swiss-eyebrow">
-                  {t("drawer_torrent")} / <span className="tabular-nums normal-case">#{torrentId}</span>
+                  {t.drawerTorrent} / <span className="tabular-nums normal-case">#{torrentId}</span>
                 </div>
                 <button
                   onClick={onClose}
-                  aria-label={t("drawer_close")}
+                  aria-label={t.drawerClose}
                   className={cn(
                     "size-10 grid place-items-center -mr-2",
                     "text-[var(--color-ink-soft)]",
@@ -256,12 +237,12 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
 
               <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 sm:py-6 space-y-5 sm:space-y-6">
                 {isLoading && (
-                  <div className="text-[14px] text-[var(--color-ink-muted)]">{t("drawer_loading")}</div>
+                  <div className="text-[14px] text-[var(--color-ink-muted)]">{t.drawerLoading}</div>
                 )}
 
                 {error && (
                   <div className="p-4 text-[13px] border-l-2 border-[var(--color-down)] bg-[var(--color-down)]/5 text-[var(--color-ink-soft)] rounded-md">
-                    {error instanceof Error ? error.message : t("drawer_load_error")}
+                    {error instanceof Error ? error.message : t.drawerLoadError}
                   </div>
                 )}
 
@@ -272,32 +253,28 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                     </h2>
 
                     <div className="swiss-rule-top swiss-rule py-4">
-                      {/* Label column is max-content: it fits the widest
-                          label exactly, so values share one edge in both
-                          languages and no label has to squash its icon. */}
+                      {/* The label column fits its widest label, so values share one edge. */}
                       <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-3 text-[13px]">
                         <PeerStatsRow state={peersState} />
                         <Row
                           icon={<Folder className="size-3.5" />}
-                          label={t("meta_forum")}
+                          label={t.metaForum}
                           value={data.forum_name}
                           onClick={() => {
                             onForumClick(data.forum_id);
                             onClose();
                           }}
                         />
-                        <Row icon={<HardDrive className="size-3.5" />} label={t("meta_size")} value={formatBytes(data.size_bytes)} mono />
-                        <Row icon={<Calendar className="size-3.5" />} label={t("meta_registered")} value={formatDate(data.registered_at)} mono />
-                        <Row icon={<Hash className="size-3.5" />} label={t("meta_hash")} value={data.hash} mono small />
+                        <Row icon={<HardDrive className="size-3.5" />} label={t.metaSize} value={formatBytes(data.size_bytes)} mono />
+                        <Row icon={<Calendar className="size-3.5" />} label={t.metaRegistered} value={formatDate(data.registered_at)} mono />
+                        <Row icon={<Hash className="size-3.5" />} label={t.metaHash} value={data.hash} mono small />
                       </dl>
                     </div>
 
-                    {/* Swiss action row — Download (accent CTA) → Transmission
-                        (send magnet to the server queue) → magnet copy →
-                        RuTracker; the star closes the row, kept square. */}
+                    {/* Download, Transmission, magnet, RuTracker; the square star closes the row. */}
                     <div className="flex gap-2 flex-wrap">
                       {magnet && (
-                      <Tooltip text={t("drawer_download_title")}>
+                      <Tooltip text={t.drawerDownloadTitle}>
                       <a
                         href={magnet}
                         className={cn(
@@ -309,13 +286,13 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                       >
                         <span className="flex items-center gap-2">
                           <Download className="size-4" />
-                          {t("drawer_download")}
+                          {t.drawerDownload}
                         </span>
                       </a>
                       </Tooltip>
                       )}
                       {txConfigured && magnet && (
-                      <Tooltip text={txOffline ? t("drawer_transmission_offline") : t("drawer_transmission_title")}>
+                      <Tooltip text={txOffline ? t.drawerTransmissionOffline : t.drawerTransmissionTitle}>
                       <button
                         type="button"
                         onClick={sendTx}
@@ -344,19 +321,19 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                           )}
                           <span>
                             {txState === "added"
-                              ? t("drawer_transmission_added")
+                              ? t.drawerTransmissionAdded
                               : txState === "duplicate"
-                                ? t("drawer_transmission_duplicate")
+                                ? t.drawerTransmissionDuplicate
                                 : txState === "error"
-                                  ? t("drawer_transmission_error")
-                                  : t("drawer_transmission")}
+                                  ? t.drawerTransmissionError
+                                  : t.drawerTransmission}
                           </span>
                         </span>
                       </button>
                       </Tooltip>
                       )}
                       {magnet && (
-                      <Tooltip text={t("drawer_magnet_title")}>
+                      <Tooltip text={t.drawerMagnetTitle}>
                       <button
                         onClick={copyMagnet}
                         className={cn(
@@ -368,10 +345,8 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                           "transition-colors grid place-items-center"
                         )}
                       >
-                        {/* Both labels share one grid cell; the hidden one
-                            still reserves width, so swapping "magnet" ↔
-                            "Скопировано" can't resize the button and shove
-                            its neighbours around. */}
+                        {/* Both labels share one grid cell and the hidden one keeps the width,
+                            so the swap cannot resize the button. */}
                         <span
                           className={cn(
                             "col-start-1 row-start-1 flex items-center gap-2",
@@ -379,7 +354,7 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                           )}
                         >
                           <Check className="size-4 text-[var(--color-accent)]" />
-                          <span>{t("drawer_magnet_copied")}</span>
+                          <span>{t.drawerMagnetCopied}</span>
                         </span>
                         <span
                           className={cn(
@@ -393,12 +368,12 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                       </button>
                       </Tooltip>
                       )}
-                      <Tooltip text={`${t("drawer_topic_title")} — rutracker.org/forum/viewtopic.php?t=${data.id}`}>
+                      <Tooltip text={`${t.drawerTopicTitle} — rutracker.org/forum/viewtopic.php?t=${data.id}`}>
                       <a
                         href={`https://rutracker.org/forum/viewtopic.php?t=${data.id}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        aria-label={t("drawer_topic_aria")}
+                        aria-label={t.drawerTopicAria}
                         className={cn(
                           "flex-1 basis-0 min-w-[120px] h-11 rounded-md",
                           "border border-[var(--color-rule)]",
@@ -409,16 +384,15 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                         )}
                       >
                         <ExternalLink className="size-4" />
-                        <span>{t("drawer_topic")}</span>
+                        <span>{t.drawerTopic}</span>
                       </a>
                       </Tooltip>
                       <FavoriteStar torrent={data} size="drawer" />
                     </div>
 
                     {data.files_count !== undefined && (
-                      // Collapsed, this section is a single line between two
-                      // hairlines: the top gap must match the container's
-                      // space-y below it, or the label sits high.
+                      // Folded, this is one line between two hairlines: its top gap must match
+                      // the container's space-y, or the label sits high.
                       <section className="swiss-rule-top pt-5 sm:pt-6">
                         <button
                           type="button"
@@ -430,31 +404,28 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                             className={cn("size-3 shrink-0 transition-transform", filesOpen && "rotate-90")}
                           />
                           <span>
-                            {t("drawer_files")}: {data.files_count}
+                            {t.drawerFiles}: {data.files_count}
                           </span>
                           {files?.truncated && (
                             <span className="normal-case tracking-normal text-[var(--color-ink-muted)]">
-                              {t("drawer_files_truncated").replace(
-                                "{n}",
-                                String(files.files_count - files.files.length)
-                              )}
+                              {t.drawerFilesTruncated(files.files_count - files.files.length)}
                             </span>
                           )}
                         </button>
                         <Collapse open={filesOpen} className="pt-3">
                             {filesLoading ? (
                               <div className="text-[12.5px] text-[var(--color-ink-muted)]">
-                                {t("drawer_files_loading")}
+                                {t.drawerFilesLoading}
                               </div>
                             ) : filesError ? (
                               <div className="text-[12.5px] text-[var(--color-down)]">
-                                {t("drawer_files_error")}
+                                {t.drawerFilesError}
                               </div>
                             ) : files ? (
                               <FileTree files={files.files} />
                             ) : (
                               <div className="text-[12.5px] text-[var(--color-ink-muted)]">
-                                {t("drawer_files_none")}
+                                {t.drawerFilesNone}
                               </div>
                             )}
                         </Collapse>
@@ -463,7 +434,7 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
 
                     <section className="swiss-rule-top pt-4">
                       <div className="swiss-eyebrow mb-3">
-                        {t("drawer_description")}
+                        {t.drawerDescription}
                       </div>
                       <div
                         className={cn(
@@ -491,10 +462,8 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
   );
 }
 
-// Trackers baked into every magnet — mirror of internal/server/download.go.
-// bt[1-4].t-ru.org are rutracker's own (`?magnet` marks magnet-originated
-// announces, as the site does); the udp:// ones are open-trackers kept as a
-// fallback. opentrackr/openbittorrent were dropped — unreachable from the daemon.
+// Trackers of every magnet — the same list as internal/server/download.go:
+// rutracker's own four, then open UDP trackers as a fallback.
 const TRACKERS = [
   "http://bt.t-ru.org/ann?magnet",
   "http://bt2.t-ru.org/ann?magnet",

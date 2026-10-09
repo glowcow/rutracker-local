@@ -6,12 +6,12 @@ export type SortKey = "relevance" | "date" | "size";
 export type SortDir = "desc" | "asc";
 export type Sort = { key: SortKey; dir: SortDir };
 
-const OPTIONS: { key: SortKey; tKey: keyof Dict }[] = [
-  { key: "relevance", tKey: "sort_relevance" },
-  { key: "date", tKey: "sort_date" },
+const OPTIONS: { key: SortKey; label: (t: Dict) => string }[] = [
+  { key: "relevance", label: (t) => t.sortRelevance },
+  { key: "date", label: (t) => t.sortDate },
   // Seeders aren't in the rutracker XML dump (dump = static metadata, no
   // live tracker stats), so we sort by Size — which we do have.
-  { key: "size", tKey: "sort_size" },
+  { key: "size", label: (t) => t.sortSize },
 ];
 
 type Props = {
@@ -19,15 +19,13 @@ type Props = {
   onChange: (sort: Sort) => void;
 };
 
-// Swiss sort — eyebrow label, text-button options with caps tracking,
-// vertical hairlines between. Active uses the accent; an arrow appears
-// only on directional sorts. flex-nowrap: wrapping stranded a bare
-// separator at a line end once the Russian labels overflowed.
+// Text buttons with rules between; the active one is accent and carries an
+// arrow when it has a direction. Never wraps: a rule would end a line.
 export function SortControl({ value, onChange }: Props) {
   const { t } = useLang();
   return (
     <div className="flex items-center gap-3 flex-nowrap">
-      <span className="swiss-eyebrow hidden lg:inline">{t("sort_label")}</span>
+      <span className="swiss-eyebrow hidden lg:inline">{t.sortLabel}</span>
       <div className="flex items-center gap-3">
         {OPTIONS.map((opt, i) => {
           const active = value.key === opt.key;
@@ -51,9 +49,7 @@ export function SortControl({ value, onChange }: Props) {
                     onChange({ key: opt.key, dir: "desc" });
                   }
                 }}
-                // Eyebrow typography inlined (not .swiss-eyebrow, which forces
-                // muted) so inactive options use high-contrast ink like the forum
-                // chips. The muted .swiss-eyebrow is kept for the static "SORT".
+                // The eyebrow's type with its own colour: idle options are ink, not muted.
                 className={cn(
                   "flex items-center gap-1 transition-colors",
                   "text-[11px] font-semibold uppercase tracking-[0.08em]",
@@ -62,7 +58,7 @@ export function SortControl({ value, onChange }: Props) {
                     : "text-[var(--color-ink)] hover:text-[var(--color-accent)]",
                 )}
               >
-                <span>{t(opt.tKey)}</span>
+                <span>{opt.label(t)}</span>
                 {active && directional && (value.dir === "desc" ? (
                   <ArrowDown className="size-3" />
                 ) : (
