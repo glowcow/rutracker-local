@@ -66,7 +66,7 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   api:
-    image: glowcow/rutracker:v1.9.1   # pick a published version — no :latest tag
+    image: glowcow/rutracker:v1.9.2   # pick a published version — no :latest tag
     depends_on: [postgres]
     environment:
       POSTGRES_HOST:     postgres
@@ -126,10 +126,11 @@ The drawer's **Transmission** button pushes a torrent's magnet straight into a T
 
 | Variable | Default | Notes |
 |---|---|---|
-| `RT_TRANSMISSION_RPC_URL` | _(empty → off)_ | Daemon RPC endpoint, e.g. `http://transmission_dc:9091/transmission/rpc`. |
+| `RT_TRANSMISSION_RPC_URL` | _(empty → off)_ | Daemon RPC endpoint, e.g. `http://transmission_dc:9091/transmission/rpc` — or `http://transmission_dc:9091/rpc` for a daemon that serves its RPC there, such as [torrwheel](https://github.com/glowcow/torrwheel). |
 | `RT_TRANSMISSION_HOST` | _(URL hostname)_ | `Host` header for the daemon's `rpc-host-whitelist`; defaults to the RPC URL's hostname (port stripped). |
 | `RT_TRANSMISSION_USER` | _(empty)_ | Basic-auth user — only if `rpc-authentication-required` is on. |
 | `RT_TRANSMISSION_PASS` | _(empty)_ | Basic-auth password. |
+| `RT_TRANSMISSION_LABEL` | _(empty → `Transmission`)_ | The daemon's name on the button and in its tooltips, e.g. `torrwheel` for a fork or `Downloads` for a role. |
 
 ## API
 
@@ -369,7 +370,7 @@ Builds the magnet server-side from the stored info-hash and sends it to the conf
 <details>
 <summary><code>GET /api/transmission/status</code> — feature state</summary>
 
-`{ "configured": bool, "online": bool }`. `configured` gates rendering the drawer button; `online` is a reachability probe (a `session-get` RPC, cached ~20s) that greys the button when the daemon is down. Both `false` when the feature is off.
+`{ "configured": bool, "online": bool, "label": string }`. `configured` gates rendering the drawer button; `online` is a reachability probe (a `session-get` RPC, cached ~20s) that greys the button when the daemon is down. Both `false` when the feature is off. `label` is `RT_TRANSMISSION_LABEL` and is left out when that is empty or the feature is off.
 
 </details>
 

@@ -51,8 +51,8 @@ export type Dict = {
   drawerMagnetTitle: string;
   drawerMagnetCopied: string;
   drawerTransmission: string;
-  drawerTransmissionTitle: string;
-  drawerTransmissionOffline: string;
+  drawerTransmissionTitle: (name: string) => string;
+  drawerTransmissionOffline: (name: string) => string;
   drawerTransmissionAdded: string;
   drawerTransmissionDuplicate: string;
   drawerTransmissionError: string;
@@ -190,8 +190,8 @@ const ru: Dict = {
   drawerMagnetTitle: "Скопировать magnet-ссылку",
   drawerMagnetCopied: "Скопировано",
   drawerTransmission: "Transmission",
-  drawerTransmissionTitle: "Отправить на закачку в Transmission",
-  drawerTransmissionOffline: "Transmission недоступен",
+  drawerTransmissionTitle: (name) => `Отправить на закачку в ${name}`,
+  drawerTransmissionOffline: (name) => `${name} недоступен`,
   drawerTransmissionAdded: "Добавлено",
   drawerTransmissionDuplicate: "Уже в очереди",
   drawerTransmissionError: "Ошибка",
@@ -325,8 +325,8 @@ const en: Dict = {
   drawerMagnetTitle: "Copy magnet link",
   drawerMagnetCopied: "Copied",
   drawerTransmission: "Transmission",
-  drawerTransmissionTitle: "Send to Transmission download queue",
-  drawerTransmissionOffline: "Transmission unavailable",
+  drawerTransmissionTitle: (name) => `Send to the ${name} download queue`,
+  drawerTransmissionOffline: (name) => `${name} unavailable`,
   drawerTransmissionAdded: "Added",
   drawerTransmissionDuplicate: "Already queued",
   drawerTransmissionError: "Error",

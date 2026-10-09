@@ -43,11 +43,13 @@ func newTransmissionClient(cfg config.Config) *transmission.Client {
 type transmissionStatusResponse struct {
 	Configured bool `json:"configured"`
 	Online     bool `json:"online"`
+	// Label is the daemon's name for the button; absent → "Transmission".
+	Label string `json:"label,omitempty"`
 }
 
 // transmissionStatusHandler reports reachability, caching the probe result for
 // a short window so opening drawers doesn't ping the daemon on every request.
-func transmissionStatusHandler(tc *transmission.Client) http.HandlerFunc {
+func transmissionStatusHandler(tc *transmission.Client, label string) http.HandlerFunc {
 	const ttl = 20 * time.Second
 	var (
 		mu        sync.Mutex
@@ -72,7 +74,7 @@ func transmissionStatusHandler(tc *transmission.Client) http.HandlerFunc {
 		}
 		cur := online
 		mu.Unlock()
-		writeJSON(w, http.StatusOK, transmissionStatusResponse{Configured: true, Online: cur})
+		writeJSON(w, http.StatusOK, transmissionStatusResponse{Configured: true, Online: cur, Label: label})
 	}
 }
 

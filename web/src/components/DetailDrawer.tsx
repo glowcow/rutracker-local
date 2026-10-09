@@ -84,6 +84,8 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
   });
   const txConfigured = txStatus?.configured ?? false;
   const txOffline = txConfigured && !(txStatus?.online ?? false);
+  // The daemon's name on the button: the server's when it sets one.
+  const txName = txStatus?.label || t.drawerTransmission;
 
   // Patch every cached list page that holds this torrent: the list never
   // refetches by itself, and its badge would stay empty until a reload.
@@ -292,7 +294,7 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                       </Tooltip>
                       )}
                       {txConfigured && magnet && (
-                      <Tooltip text={txOffline ? t.drawerTransmissionOffline : t.drawerTransmissionTitle}>
+                      <Tooltip text={txOffline ? t.drawerTransmissionOffline(txName) : t.drawerTransmissionTitle(txName)}>
                       <button
                         type="button"
                         onClick={sendTx}
@@ -326,7 +328,7 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
                                 ? t.drawerTransmissionDuplicate
                                 : txState === "error"
                                   ? t.drawerTransmissionError
-                                  : t.drawerTransmission}
+                                  : txName}
                           </span>
                         </span>
                       </button>

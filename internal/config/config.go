@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -51,6 +52,9 @@ type Config struct {
 	// Optional Basic auth — unset when rpc-authentication-required is false.
 	TransmissionUser string
 	TransmissionPass string
+	// TransmissionLabel names the daemon on the drawer's button and in its
+	// tooltips. Empty → the UI says "Transmission".
+	TransmissionLabel string
 }
 
 // Load reads config from env. Every app-owned var is RT_-prefixed; the only
@@ -84,6 +88,7 @@ func Load() (Config, error) {
 		TransmissionHost:   os.Getenv("RT_TRANSMISSION_HOST"),
 		TransmissionUser:   os.Getenv("RT_TRANSMISSION_USER"),
 		TransmissionPass:   os.Getenv("RT_TRANSMISSION_PASS"),
+		TransmissionLabel:  strings.TrimSpace(os.Getenv("RT_TRANSMISSION_LABEL")),
 	}, nil
 }
 

@@ -122,7 +122,8 @@ export const getTorrentFiles = (id: number) =>
 
 // Transmission feature state: configured (endpoint set → render the button)
 // and online (live probe → active vs greyed-out). Both false when off.
-export type TransmissionStatus = { configured: boolean; online: boolean };
+// label: the daemon's name for the button, when the server sets one.
+export type TransmissionStatus = { configured: boolean; online: boolean; label?: string };
 
 export function getTransmissionStatus() {
   return getJSON<TransmissionStatus>("/api/transmission/status");

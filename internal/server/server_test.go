@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/glowcow/rutracker-local/internal/transmission"
 )
 
 // An unknown /api path must not fall through to the SPA's index.html.
@@ -47,6 +49,32 @@ func TestUnknownAPIPathIsJSON404(t *testing.T) {
 			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body["error"] == "" {
 				t.Errorf("%s %s: body %q is not a JSON error", c.method, c.path, rec.Body.String())
 			}
+		}
+	}
+}
+
+// The button's name comes from the server only when the feature is on.
+func TestTransmissionStatusCarriesTheLabel(t *testing.T) {
+	daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+	}))
+	defer daemon.Close()
+
+	cases := []struct {
+		name   string
+		client *transmission.Client
+		label  string
+		want   string
+	}{
+		{"off", nil, "torrwheel", `{"configured":false,"online":false}`},
+		{"on, named", transmission.New(daemon.URL, "", "", ""), "torrwheel", `{"configured":true,"online":true,"label":"torrwheel"}`},
+		{"on, unnamed", transmission.New(daemon.URL, "", "", ""), "", `{"configured":true,"online":true}`},
+	}
+	for _, c := range cases {
+		rec := httptest.NewRecorder()
+		transmissionStatusHandler(c.client, c.label)(rec, httptest.NewRequest(http.MethodGet, "/api/transmission/status", nil))
+		if got := strings.TrimSpace(rec.Body.String()); got != c.want {
+			t.Errorf("%s: got %s, want %s", c.name, got, c.want)
 		}
 	}
 }

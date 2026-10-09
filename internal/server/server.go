@@ -34,7 +34,7 @@ func Run(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) error {
 	mux.Handle("GET /api/torrents/{id}/files", filesHandler(pool))
 	mux.Handle("GET /api/torrents/{id}/peers", peersHandler(pool, newPeersClient(ctx, cfg, pool), cfg.PeersTTL))
 	mux.Handle("POST /api/torrents/{id}/download", downloadHandler(pool, txClient))
-	mux.Handle("GET /api/transmission/status", transmissionStatusHandler(txClient))
+	mux.Handle("GET /api/transmission/status", transmissionStatusHandler(txClient, cfg.TransmissionLabel))
 
 	mux.Handle("GET /api/favorites", listFavoritesHandler(pool))
 	mux.Handle("POST /api/favorites/{id}", addFavoriteHandler(pool))
