@@ -86,7 +86,7 @@ export function Header({
           onClick={onReset}
           className="order-1 sm:order-none flex items-center gap-2 shrink-0 select-none cursor-pointer lg:justify-self-start"
         >
-          <span className="font-display font-medium text-[26px] leading-none lining-nums">
+          <span className="font-display font-medium text-[22px] leading-none">
             RuTracker
           </span>
         </button>

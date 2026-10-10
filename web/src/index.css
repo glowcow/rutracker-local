@@ -1,11 +1,11 @@
 @import "tailwindcss";
 @import "@fontsource-variable/inter";
-@import "@fontsource-variable/cormorant-garamond";
+@import "@fontsource/expletus-sans/latin-500.css";
 
 @theme {
   --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
-  /* The wordmark. */
-  --font-display: "Cormorant Garamond Variable", Georgia, serif;
+  /* The wordmark: a stencil face. */
+  --font-display: "Expletus Sans", var(--font-sans);
 
   /* The classic scheme, light. One set of names: `.dark` and `.warm` on
      <html> replace the values, so markup never carries a variant. */
