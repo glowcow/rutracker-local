@@ -32,8 +32,7 @@ type Config struct {
 	// PeersTTL keeps a torrent's counts fresh; opened later, it is scraped
 	// again, at most once a day by default.
 	PeersTTL time.Duration
-	// PeersMinInterval — global spacing between outbound scrape requests (a
-	// politeness rate limit). Default 2s.
+	// PeersMinInterval spaces all scrape requests, 2 s by default.
 	PeersMinInterval time.Duration
 
 	// The download button; an empty TransmissionRPCURL hides it.
@@ -47,21 +46,27 @@ type Config struct {
 	// TransmissionLabel names the daemon on the drawer's button and in its
 	// tooltips. Empty → the UI says "Transmission".
 	TransmissionLabel string
+
+	// Warnings are problems that only switched the peers off; run logs them.
+	Warnings []error
 }
 
 // Load reads the process environment.
 func Load() (Config, error) { return LoadFrom(os.Getenv) }
 
-// LoadFrom reads the variables through getenv and reports every problem; the
-// DSN is RT_DATABASE_URL, else built from the postgres image's POSTGRES_*.
+// LoadFrom reads through getenv and reports every problem; the DSN is
+// RT_DATABASE_URL, else built from the postgres image's POSTGRES_*.
 func LoadFrom(getenv func(string) string) (Config, error) {
-	var errs []error
+	var errs, warnings []error
 	str := func(k, fallback string) string {
 		if v := getenv(k); v != "" {
 			return v
 		}
 		return fallback
 	}
+	// A bad peers setting warns and keeps the peers off: a typo there must
+	// not take search down (operator, 2026-08-01).
+	peersOK := true
 	boolean := func(k string, fallback bool) bool {
 		v := getenv(k)
 		if v == "" {
@@ -69,7 +74,8 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		}
 		b, err := strconv.ParseBool(v)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("%s: want true or false, got %q", k, v))
+			warnings = append(warnings, fmt.Errorf("%s: want true or false, got %q; peers off", k, v))
+			peersOK = false
 		}
 		return b
 	}
@@ -80,7 +86,9 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		}
 		d, err := time.ParseDuration(v)
 		if err != nil || d <= 0 {
-			errs = append(errs, fmt.Errorf("%s: want a positive duration like 24h, got %q", k, v))
+			warnings = append(warnings, fmt.Errorf("%s: want a positive duration like 24h, got %q; peers off", k, v))
+			peersOK = false
+			return fallback
 		}
 		return d
 	}
@@ -121,6 +129,8 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		TransmissionPass:   getenv("RT_TRANSMISSION_PASS"),
 		TransmissionLabel:  strings.TrimSpace(getenv("RT_TRANSMISSION_LABEL")),
 	}
+	cfg.PeersEnabled = cfg.PeersEnabled && peersOK
+	cfg.Warnings = warnings
 	if len(errs) > 0 {
 		return Config{}, errors.Join(errs...)
 	}

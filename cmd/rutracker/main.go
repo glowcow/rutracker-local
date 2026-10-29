@@ -53,6 +53,9 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
 	}
+	for _, w := range cfg.Warnings {
+		slog.Warn("config", "err", w)
+	}
 
 	// Every boot brings the schema to the embedded migrations; at head a no-op.
 	slog.Info("running migrations")

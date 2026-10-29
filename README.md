@@ -68,7 +68,7 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   api:
-    image: glowcow/rutracker:v1.9.7   # pick a published version — no :latest tag
+    image: glowcow/rutracker:v1.9.8   # pick a published version — no :latest tag
     depends_on: [postgres]
     environment:
       POSTGRES_HOST:     postgres
@@ -92,7 +92,7 @@ Then open `http://localhost:8080`, click the database icon in the header, paste 
 
 ## Configuration
 
-Every app-owned variable is `RT_`-prefixed. A value that does not parse — a boolean other than true/false, a duration like `24` — stops the start, every such problem named at once. The only exceptions are `POSTGRES_*` — the postgres image's own names, shared with the db container through one `env_file`. The binary reads `RT_DATABASE_URL` if set, otherwise builds the DSN from the `POSTGRES_*` vars. The password is URL-escaped via `net/url.UserPassword`, so dollars / spaces / special chars are fine.
+Every app-owned variable is `RT_`-prefixed. A missing database stops the start; a peers setting that does not parse only keeps the peers off, with a warning in the log. The only exceptions are `POSTGRES_*` — the postgres image's own names, shared with the db container through one `env_file`. The binary reads `RT_DATABASE_URL` if set, otherwise builds the DSN from the `POSTGRES_*` vars. The password is URL-escaped via `net/url.UserPassword`, so dollars / spaces / special chars are fine.
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -115,7 +115,7 @@ Peer counts aren't in the dump — they're scraped live from the rutracker topic
 
 | Variable | Default | Notes |
 |---|---|---|
-| `RT_PEERS_ENABLED` | `false` | Master switch; needs `RT_USER`+`RT_PASS` too. |
+| `RT_PEERS_ENABLED` | `false` | Master switch; needs `RT_USER`+`RT_PASS` too. Unset or unparseable → off (fail-closed); a bad `RT_PEERS_TTL` or `RT_PEERS_MIN_INTERVAL` keeps it off too. |
 | `RT_USER` | _(empty → off)_ | rutracker login; used to mint a `bb_session` cookie. |
 | `RT_PASS` | _(empty → off)_ | rutracker password. Keep it in a server-side env file, never in git. |
 | `RT_BASE_URL` | `https://rutracker.org` | Site root scraped for peers. |

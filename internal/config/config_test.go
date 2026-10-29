@@ -65,26 +65,41 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
-// The peers layer is off unless RT_PEERS_ENABLED says true.
+// The peers are off unless RT_PEERS_ENABLED says true; a bad value of any
+// peers setting keeps them off with a warning and the app starting.
 func TestLoadPeersEnabled(t *testing.T) {
-	for v, want := range map[string]bool{"": false, "true": true, "1": true, "false": false} {
-		cfg, err := LoadFrom(env(map[string]string{"RT_DATABASE_URL": "postgres://u:p@h:5432/d", "RT_PEERS_ENABLED": v}))
-		if err != nil || cfg.PeersEnabled != want {
-			t.Errorf("RT_PEERS_ENABLED=%q: %v %v, want %v", v, cfg.PeersEnabled, err, want)
+	for _, c := range []struct {
+		env  map[string]string
+		want bool
+		warn string
+	}{
+		{map[string]string{}, false, ""},
+		{map[string]string{"RT_PEERS_ENABLED": "true"}, true, ""},
+		{map[string]string{"RT_PEERS_ENABLED": "1"}, true, ""},
+		{map[string]string{"RT_PEERS_ENABLED": "false"}, false, ""},
+		{map[string]string{"RT_PEERS_ENABLED": "nonsense"}, false, "RT_PEERS_ENABLED"},
+		{map[string]string{"RT_PEERS_ENABLED": "true", "RT_PEERS_TTL": "24"}, false, "RT_PEERS_TTL"},
+		{map[string]string{"RT_PEERS_ENABLED": "true", "RT_PEERS_MIN_INTERVAL": "-1s"}, false, "RT_PEERS_MIN_INTERVAL"},
+	} {
+		c.env["RT_DATABASE_URL"] = "postgres://u:p@h:5432/d"
+		cfg, err := LoadFrom(env(c.env))
+		if err != nil {
+			t.Fatalf("%v: %v", c.env, err)
 		}
+		if cfg.PeersEnabled != c.want || (c.warn == "") != (len(cfg.Warnings) == 0) ||
+			(c.warn != "" && !strings.Contains(cfg.Warnings[0].Error(), c.warn)) {
+			t.Errorf("%v: enabled %v, warnings %v; want %v, %q", c.env, cfg.PeersEnabled, cfg.Warnings, c.want, c.warn)
+		}
+	}
+	cfg, _ := LoadFrom(env(map[string]string{"RT_DATABASE_URL": "postgres://u:p@h:5432/d", "RT_PEERS_TTL": "bad"}))
+	if cfg.PeersTTL != 24*time.Hour {
+		t.Errorf("a bad TTL gave %v, want the default", cfg.PeersTTL)
 	}
 }
 
 func TestLoadJoinsProblems(t *testing.T) {
-	_, err := LoadFrom(env(map[string]string{
-		"RT_PEERS_ENABLED": "nonsense", "RT_PEERS_TTL": "24", "RT_PEERS_MIN_INTERVAL": "-1s",
-	}))
-	if err == nil {
-		t.Fatal("a broken config loaded")
-	}
-	for _, want := range []string{"RT_DATABASE_URL, or POSTGRES_USER", "RT_PEERS_ENABLED", "RT_PEERS_TTL", "RT_PEERS_MIN_INTERVAL"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("%v\nlacks %q", err, want)
-		}
+	_, err := LoadFrom(env(map[string]string{"RT_PEERS_ENABLED": "nonsense"}))
+	if err == nil || !strings.Contains(err.Error(), "RT_DATABASE_URL, or POSTGRES_USER") || strings.Contains(err.Error(), "RT_PEERS_ENABLED") {
+		t.Errorf("got %v, want the database error alone", err)
 	}
 }
