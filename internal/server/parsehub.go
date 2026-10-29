@@ -10,10 +10,8 @@ import (
 	"github.com/glowcow/rutracker-local/internal/ingest"
 )
 
-// parseHub is an in-memory pub/sub for the current parse run's events. It keeps
-// the full event log of the run so a late subscriber (page reload, another
-// device) replays everything so far, then streams live. Single-flight means at
-// most one run at a time, so a fresh run resets the buffer.
+// parseHub fans out the run's events and keeps them all, so a late subscriber
+// replays the run so far; a new run resets it.
 type parseHub struct {
 	mu     sync.Mutex
 	buf    []ingest.Event
@@ -32,10 +30,8 @@ func (h *parseHub) reset() {
 	h.mu.Unlock()
 }
 
-// publish appends an event to the run log and fans it out to live subscribers.
-// Matches the ingest.Emitter signature. Sends are non-blocking: a subscriber
-// whose buffer is full (a stalled SSE client) drops the event rather than
-// stalling the parse.
+// publish keeps ev and sends it on; a stalled subscriber loses events rather
+// than stalling the parse.
 func (h *parseHub) publish(ev ingest.Event) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -48,10 +44,8 @@ func (h *parseHub) publish(ev ingest.Event) {
 	}
 }
 
-// subscribe registers a live listener. It returns a snapshot of everything
-// buffered so far (replay it first), the live channel, and an unsubscribe func.
-// Snapshot + registration happen under one lock so no event can slip between
-// them.
+// subscribe returns the events so far and a live channel, under one lock so
+// none slips between them.
 func (h *parseHub) subscribe() (replay []ingest.Event, ch chan ingest.Event, cancel func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -73,10 +67,8 @@ func (h *parseHub) subscribe() (replay []ingest.Event, ch chan ingest.Event, can
 	return replay, ch, cancel
 }
 
-// parseController owns the single-flight guard and drives ingest.Run for the
-// in-app admin endpoint. The run executes on a detached context derived from
-// the server lifetime, so it survives the triggering HTTP request returning but
-// is still cancelled on server shutdown (→ ingest marks the run failed).
+// parseController runs one parse at a time on the server's context: it
+// outlives the request and stops on shutdown, failing the run.
 type parseController struct {
 	baseCtx context.Context
 	cfg     config.Config

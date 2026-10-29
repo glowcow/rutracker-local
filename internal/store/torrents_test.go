@@ -15,9 +15,8 @@ import (
 	"github.com/glowcow/rutracker-local/internal/store"
 )
 
-// testPool: returns a connected pool with migrations applied and the
-// torrents table truncated. Skips the test if DATABASE_URL isn't set, so
-// `go test ./...` without a DB still passes (used in lint:go-only contexts).
+// testPool returns a migrated pool with the tables emptied, or skips without
+// DATABASE_URL.
 func testPool(t *testing.T) (context.Context, *pgxpool.Pool) {
 	t.Helper()
 	url := os.Getenv("DATABASE_URL")
@@ -32,10 +31,8 @@ func testPool(t *testing.T) (context.Context, *pgxpool.Pool) {
 	if err != nil {
 		t.Fatalf("pgx pool: %v", err)
 	}
-	// `favorites`, `torrent_peers` and `torrent_files` all have an FK on
-	// torrents(id); listing them keeps TRUNCATE explicit (no CASCADE) so adding
-	// another FK-bearing table in the future fails loudly here rather than
-	// silently wiping it.
+	// Every table with an FK on torrents is named: a new one fails here rather
+	// than being emptied by a CASCADE in silence.
 	if _, err := pool.Exec(ctx, `TRUNCATE torrents, favorites, torrent_peers, torrent_files`); err != nil {
 		pool.Close()
 		t.Fatalf("truncate: %v", err)
@@ -44,10 +41,8 @@ func testPool(t *testing.T) (context.Context, *pgxpool.Pool) {
 	return ctx, pool
 }
 
-// ingest writes batch through the production COPY → merge path (the same
-// CopyIngester the parser uses), so every test exercises the SQL that
-// actually runs in production. A fresh ingester per call is fine at test
-// sizes; the parser holds one per worker for throughput, not correctness.
+// ingest writes through the production CopyIngester, so the tests run the
+// SQL production runs.
 func ingest(t *testing.T, ctx context.Context, pool *pgxpool.Pool, batch []store.Torrent) int {
 	t.Helper()
 	ing, err := store.NewCopyIngester(ctx, pool)
@@ -214,10 +209,8 @@ func TestIngest_InsertThenUpdate(t *testing.T) {
 	}
 }
 
-// Identical re-ingest must still refresh last_seen_at — the merge step
-// skips no-op rows to keep TOAST stable, so the bump-seen step has to
-// refresh the timestamp on its own. If it didn't, the post-parse Sweep
-// would delete every row that wasn't materially changed.
+// An identical re-ingest still bumps last_seen_at; otherwise the sweep would
+// delete every unchanged row.
 func TestIngest_NoOpReinsertStillBumpsLastSeen(t *testing.T) {
 	ctx, pool := testPool(t)
 	ingest(t, ctx, pool, sampleTorrents())
@@ -243,9 +236,8 @@ func TestSweep_DeletesUntouched(t *testing.T) {
 	// Seed the table; everything gets last_seen_at = NOW().
 	ingest(t, ctx, pool, sampleTorrents())
 
-	// Capture the cutoff AS the simulated "next parse" would: postgres-side
-	// NOW(), then nudge any-but-one row to look like it was re-touched in
-	// that future parse.
+	// The cutoff as the next parse would take it; then all rows but one look
+	// touched by that parse.
 	cutoff, err := store.ParseStartNow(ctx, pool)
 	if err != nil {
 		t.Fatal(err)
@@ -276,10 +268,7 @@ func TestSweep_NothingToDelete(t *testing.T) {
 	ctx, pool := testPool(t)
 
 	ingest(t, ctx, pool, sampleTorrents())
-	// Cutoff captured AFTER seeding — every row has last_seen_at < cutoff,
-	// but a real parse would re-touch them all; here we model the "no
-	// touches yet" half by simply running sweep against a cutoff BEFORE the
-	// seed time. Use a small backdate.
+	// A cutoff before the seed: the sweep must find nothing older.
 	cutoff := time.Now().Add(-1 * time.Hour)
 	deleted, err := store.Sweep(ctx, pool, cutoff)
 	if err != nil {
@@ -423,9 +412,8 @@ func TestSearch_Filters_And_Sort(t *testing.T) {
 func TestSearch_UnknownSortFallsBackSafely(t *testing.T) {
 	ctx, pool := testPool(t)
 	ingest(t, ctx, pool, sampleTorrents())
-	// Both Sort and Dir contain SQL-injection bait that is not in the
-	// whitelist. Search must (a) fall back to "date" / "desc" instead of
-	// concatenating user input into ORDER BY, and (b) leave the table intact.
+	// Sort and Dir carry SQL injection outside the whitelist: Search falls back
+	// to date/desc and the table survives.
 	items, err := store.Search(ctx, pool, store.SearchParams{
 		Sort: "banana; DROP TABLE torrents;--",
 		Dir:  "banana",

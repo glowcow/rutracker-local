@@ -2,9 +2,11 @@
 /bin/
 /dist/
 
-# Vite build output. Keep the placeholder so `go build` can find a non-empty
-# embed target even when the frontend hasn't been built yet (CI lint/test
-# stages, fresh clones).
+# CI caches inside the project directory
+.gocache/
+.gomodcache/
+
+# Vite build output; the placeholder keeps the embed compiling on a fresh clone.
 web/dist/*
 !web/dist/.gitkeep
 
@@ -17,8 +19,10 @@ web/dist/*
 *.swp
 
 # Test/coverage
+*.test
 *.out
 coverage.txt
+coverage.xml
 
 # Local env overrides
 .env

@@ -20,10 +20,8 @@ import (
 
 // API handlers — all live behind the /api/ prefix in server.Run.
 
-// versionedCache memoises an expensive read per version = latest succeeded
-// parser_run id (torrents is immutable between sweeps, so recompute only on a
-// new sweep). In-process, dies on restart. Version 0 ("no succeeded run") is
-// never cached — it conflates fresh-deploy / mid-parse / DB-error states.
+// versionedCache keeps one read per dump version, the latest succeeded
+// parser_run id; version 0 (no such run yet) is never cached.
 type versionedCache[T any] struct {
 	mu        sync.Mutex
 	version   int64
@@ -44,9 +42,8 @@ func (c *versionedCache[T]) get(version int64) (T, bool) {
 func (c *versionedCache[T]) set(version int64, v T) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// Refuse the sentinel and stale writers: a request that read version N
-	// before a sweep finished must not overwrite the N+1 snapshot a faster
-	// request already stored.
+	// A request that read version N must not overwrite the N+1 a faster one
+	// stored.
 	if version == 0 || (c.populated && version < c.version) {
 		return
 	}
@@ -55,10 +52,8 @@ func (c *versionedCache[T]) set(version int64, v T) {
 	c.populated = true
 }
 
-// latestParserRun returns the latest *succeeded* parser_run: its id (the cache
-// version) and finish time (the dump's freshness stamp, nil while unfinished).
-// Zero id = none yet (fresh deploy / all failed); non-NotFound errors are
-// logged but return 0 (which versionedCache treats as uncacheable → recompute).
+// latestParserRun returns the latest succeeded run's id and finish time; 0
+// when there is none or the read failed, which the caches skip.
 func latestParserRun(ctx context.Context, pool *pgxpool.Pool) (int64, *time.Time) {
 	pr, err := store.LatestSucceededParserRun(ctx, pool)
 	if err != nil {
@@ -76,9 +71,8 @@ func latestParserVersion(ctx context.Context, pool *pgxpool.Pool) int64 {
 	return id
 }
 
-// applyVersionETag stamps a dump-version ETag and answers If-None-Match with a
-// 304 (the parser_run id is a perfect validator — /api/forums changes only when
-// it does). no-cache = revalidate each load, but a 304 beats the 70 KB body.
+// applyVersionETag sets the dump-version ETag and answers a match with 304:
+// the run id changes exactly when the body does.
 func applyVersionETag(w http.ResponseWriter, r *http.Request, version int64) bool {
 	if version == 0 {
 		return false
@@ -94,13 +88,8 @@ func applyVersionETag(w http.ResponseWriter, r *http.Request, version int64) boo
 }
 
 func statsHandler(pool *pgxpool.Pool, peersEnabled bool) http.HandlerFunc {
-	// statsResp = the heavy dump-derived stats (cached by parser version) plus
-	// peers_cached, which grows continuously as browsing populates the peer
-	// cache. peers_cached is recomputed per request (cheap COUNT on a small
-	// table), so no version-ETag here — it would 304 away the changing number.
-	// peers_enabled lets the list hide its peer badge when the feature is off.
-	// dump_updated_at is when the last successful ingest finished — the UI's
-	// "@ dd-mm-yyyy" freshness stamp; omitted until a first sweep completes.
+	// The cached dump stats, plus peers_cached counted per request (so no
+	// ETag) and dump_updated_at, absent until a first sweep.
 	type statsResp struct {
 		store.Stats
 		PeersCached   int64      `json:"peers_cached"`
@@ -160,9 +149,8 @@ func forumsHandler(pool *pgxpool.Pool) http.HandlerFunc {
 	}
 }
 
-// searchTotalsCache memoises CountSearch per (q, forum_id) for one dump version.
-// The count is the expensive half of a search (a broad query counts millions),
-// changing only on a sweep — so paging pays it once. Version 0 bypasses the cache.
+// searchTotalsCache keeps CountSearch per query and forum for one dump
+// version, so paging counts once.
 type searchTotalsCache struct {
 	mu      sync.Mutex
 	version int64
@@ -174,9 +162,8 @@ type searchKey struct {
 	forumID int32
 }
 
-// maxCachedTotals bounds the map; distinct (q, forum) pairs accumulate from
-// type-ahead typing. Dump-and-restart eviction is fine at this size — the
-// entries are 16 bytes plus the query string.
+// maxCachedTotals bounds the map, which type-ahead fills; it is dropped when
+// full.
 const maxCachedTotals = 4096
 
 func (c *searchTotalsCache) get(version int64, key searchKey) (int64, bool) {
@@ -274,15 +261,12 @@ func torrentHandler(pool *pgxpool.Pool) http.HandlerFunc {
 	}
 }
 
-// maxResponseFiles caps how many entries one listing response carries. The
-// dump's median torrent has 10 files and its p99 has 429, but the tail reaches
-// 33k — enough JSON to stall the drawer. files_count keeps the true number, so
-// the UI can say how many were left out.
+// maxResponseFiles caps a listing response: the tail of the dump reaches 33k
+// files; files_count keeps the true number.
 const maxResponseFiles = 1000
 
-// filesHandler serves a torrent's file listing. The stored blob decompresses
-// straight into the response body — the common case never parses JSON; only an
-// oversized listing is decoded, cut and re-encoded.
+// filesHandler inflates the stored listing straight into the body; only one
+// over the cap is decoded, cut and encoded again.
 func filesHandler(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := parseTorrentID(w, r)
@@ -404,8 +388,6 @@ func parseTorrentID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	}
 	return id, true
 }
-
-// --- small parsing helpers (no library; this is the entire usage) -----------
 
 func parseInt(s string, fallback int) int {
 	if s == "" {

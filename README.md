@@ -12,16 +12,17 @@ The code is developed in a private GitLab project; this repository is its public
 - [Configuration](#configuration)
   - [Live seeders/leechers (off by default)](#live-seedersleechers-off-by-default)
   - [Send to Transmission (optional)](#send-to-transmission-optional)
-- [API](#api)
+- [HTTP endpoints](#http-endpoints)
+- [Metrics](#metrics)
 - [How it works](#how-it-works)
-- [Project layout](#project-layout)
-- [Local development](#local-development)
-- [Operations](#operations)
   - [Loading a dump](#loading-a-dump)
-  - [Reclaim Postgres bloat (one-shot VACUUM FULL)](#reclaim-postgres-bloat-one-shot-vacuum-full)
-- [Releases](#releases)
+  - [Search and caching](#search-and-caching)
+  - [Descriptions](#descriptions)
+  - [Reclaiming Postgres bloat](#reclaiming-postgres-bloat)
+- [Project layout](#project-layout)
+- [Build and test](#build-and-test)
+  - [Local development](#local-development)
 - [Security model](#security-model)
-- [Disclaimer](#disclaimer)
 - [License](#license)
 
 ## Features
@@ -52,7 +53,8 @@ The image is on Docker Hub, published per release as `glowcow/rutracker:<vX.Y.Z>
 
 **Get a dump.** rutracker publishes the full catalogue as a torrent on the tracker itself — an XML dump named `rutracker-YYYYMMDD.xml.xz` (~30 GB unpacked), refreshed every few months. Download it into a directory, e.g. `./dumps`; it's mounted read-only below.
 
-Minimal compose:
+<details>
+<summary>A minimal compose file (Postgres and the app, 27 lines)</summary>
 
 ```yaml
 services:
@@ -66,7 +68,7 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   api:
-    image: glowcow/rutracker:v1.9.6   # pick a published version — no :latest tag
+    image: glowcow/rutracker:v1.9.7   # pick a published version — no :latest tag
     depends_on: [postgres]
     environment:
       POSTGRES_HOST:     postgres
@@ -84,11 +86,13 @@ volumes:
   pgdata:
 ```
 
+</details>
+
 Then open `http://localhost:8080`, click the database icon in the header, paste the admin token, pick the dump and start a parse with **sweep** on — see [Loading a dump](#loading-a-dump). A full dump lands in ~15 minutes.
 
 ## Configuration
 
-Every app-owned variable is `RT_`-prefixed. The only exceptions are `POSTGRES_*` — the postgres image's own names, shared with the db container through one `env_file`. The binary reads `RT_DATABASE_URL` if set, otherwise builds the DSN from the `POSTGRES_*` vars. The password is URL-escaped via `net/url.UserPassword`, so dollars / spaces / special chars are fine.
+Every app-owned variable is `RT_`-prefixed. A value that does not parse — a boolean other than true/false, a duration like `24` — stops the start, every such problem named at once. The only exceptions are `POSTGRES_*` — the postgres image's own names, shared with the db container through one `env_file`. The binary reads `RT_DATABASE_URL` if set, otherwise builds the DSN from the `POSTGRES_*` vars. The password is URL-escaped via `net/url.UserPassword`, so dollars / spaces / special chars are fine.
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -111,7 +115,7 @@ Peer counts aren't in the dump — they're scraped live from the rutracker topic
 
 | Variable | Default | Notes |
 |---|---|---|
-| `RT_PEERS_ENABLED` | `false` | Master switch. Unset or unparseable → off (fail-closed). Needs `RT_USER`+`RT_PASS` too. |
+| `RT_PEERS_ENABLED` | `false` | Master switch; needs `RT_USER`+`RT_PASS` too. |
 | `RT_USER` | _(empty → off)_ | rutracker login; used to mint a `bb_session` cookie. |
 | `RT_PASS` | _(empty → off)_ | rutracker password. Keep it in a server-side env file, never in git. |
 | `RT_BASE_URL` | `https://rutracker.org` | Site root scraped for peers. |
@@ -132,7 +136,7 @@ The drawer's **Transmission** button pushes a torrent's magnet straight into a T
 | `RT_TRANSMISSION_PASS` | _(empty)_ | Basic-auth password. |
 | `RT_TRANSMISSION_LABEL` | _(empty → `Transmission`)_ | The daemon's name on the button and in its tooltips, e.g. `torrwheel` for a fork or `Downloads` for a role. |
 
-## API
+## HTTP endpoints
 
 All responses are JSON. The server logs request method, path, status, and duration in JSON-line format.
 
@@ -146,7 +150,7 @@ Transport notes that apply across endpoints:
 <details>
 <summary><code>GET /healthz</code> — liveness probe (Postgres ping)</summary>
 
-Liveness probe with a Postgres ping. Used by docker compose healthchecks.
+Liveness probe with a Postgres ping.
 
 ```bash
 $ curl -s http://localhost:8080/healthz
@@ -156,26 +160,9 @@ $ curl -s http://localhost:8080/healthz
 </details>
 
 <details>
-<summary><code>GET /metrics</code> — Prometheus metrics reference</summary>
+<summary><code>GET /metrics</code> — Prometheus metrics</summary>
 
-Prometheus exposition format. Scrape this from your monitoring stack.
-
-Custom metrics on top of the Go-process defaults:
-
-| Metric | Type | Labels | Source |
-|---|---|---|---|
-| `rutracker_http_requests_total` | counter | `method`, `route`, `status_class` | Per-request middleware. Route is the normalized endpoint (`/api/torrents/{id}` etc), status_class is `2xx`/`3xx`/`4xx`/`5xx`. |
-| `rutracker_http_request_duration_seconds` | histogram | `method`, `route` | Per-request middleware. Buckets tuned for sub-50 ms p50 + the cold-cache stats endpoint. |
-| `rutracker_torrents_total` | gauge | — | `SELECT COUNT(*) FROM torrents`, recomputed only when a new succeeded `parser_run` lands (same versioned cache as `/api/stats`); other gauges still refresh every 30 s. |
-| `rutracker_forums_total` | gauge | — | Same versioned refresh — distinct `forum_id` count. |
-| `rutracker_torrents_size_bytes` | gauge | — | Sum of `size_bytes`. |
-| `rutracker_torrents_live_tuples` | gauge | — | `n_live_tup` from `pg_stat_user_tables` for the `torrents` table. |
-| `rutracker_torrents_dead_tuples` | gauge | — | `n_dead_tup` from `pg_stat_user_tables`. Plot `dead/(dead+live)` and watch for a sustained > 20 % — that's the autovacuum-falling-behind threshold. The dashboard's "PG — torrents dead tuple ratio" panel does this already. |
-| `rutracker_pg_database_size_bytes` | gauge | — | `pg_database_size(current_database())` — total on-disk footprint (heap + indexes + TOAST + dead space). Climbing while `torrents_total` is flat is the bloat early-warning. |
-| `rutracker_parser_last_run_*` | gauge | — | Snapshot from the latest `parser_runs` row: `started_timestamp_seconds`, `finished_timestamp_seconds`, `duration_seconds`, `rows_inserted`, `rows_swept`. |
-| `rutracker_parser_runs_total` | gauge | `status` | Lifetime row count from `parser_runs` per status (`running`/`succeeded`/`failed`). |
-
-A starter Grafana dashboard JSON lives at `grafana/rutracker-overview.json`. It's data-source-templated against Prometheus / VictoriaMetrics — import via Dashboards → New → Import.
+Prometheus exposition format: the metrics below plus the Go and process collectors.
 
 </details>
 
@@ -461,73 +448,30 @@ The parse runs server-side and is tracked in `parser_runs`; a `running` row left
 
 </details>
 
+## Metrics
+
+Served at `/metrics`; the content gauges refresh every 30 s, the full-scan ones only when a new dump has loaded. A starter Grafana dashboard is at `grafana/rutracker-overview.json`, templated on the data source.
+
+<details>
+<summary>All 11 metrics</summary>
+
+| Metric | Type | Meaning |
+| --- | --- | --- |
+| `rutracker_build_info` | gauge | 1, labels `version`, `commit`, `build_date` |
+| `rutracker_http_requests_total` | counter | Per-request middleware. Route is the normalized endpoint (`/api/torrents/{id}` etc), status_class is `2xx`/`3xx`/`4xx`/`5xx`. Labels `method`, `route`, `status_class`. |
+| `rutracker_http_request_duration_seconds` | histogram | Per-request middleware. Buckets tuned for sub-50 ms p50 + the cold-cache stats endpoint. Labels `method`, `route`. |
+| `rutracker_torrents_total` | gauge | `SELECT COUNT(*) FROM torrents`, recomputed only when a new succeeded `parser_run` lands (same versioned cache as `/api/stats`); other gauges still refresh every 30 s. |
+| `rutracker_forums_total` | gauge | Same versioned refresh — distinct `forum_id` count. |
+| `rutracker_torrents_size_bytes` | gauge | Sum of `size_bytes`. |
+| `rutracker_torrents_live_tuples` | gauge | `n_live_tup` from `pg_stat_user_tables` for the `torrents` table. |
+| `rutracker_torrents_dead_tuples` | gauge | `n_dead_tup` from `pg_stat_user_tables`. Plot `dead/(dead+live)` and watch for a sustained > 20 % — that's the autovacuum-falling-behind threshold. The dashboard's "PG — torrents dead tuple ratio" panel does this already. |
+| `rutracker_pg_database_size_bytes` | gauge | `pg_database_size(current_database())` — total on-disk footprint (heap + indexes + TOAST + dead space). Climbing while `torrents_total` is flat is the bloat early-warning. |
+| `rutracker_parser_last_run_*` | gauge | Snapshot from the latest `parser_runs` row: `started_timestamp_seconds`, `finished_timestamp_seconds`, `duration_seconds`, `rows_inserted`, `rows_swept`. |
+| `rutracker_parser_runs_total` | gauge | Lifetime row count from `parser_runs` per status (`running`/`succeeded`/`failed`). Labels `status`. |
+
+</details>
+
 ## How it works
-
-One Go module, one binary that takes no commands: it migrates the schema and serves. Nothing is plugged in dynamically — adding a feature usually means a new exported function in one of these packages plus a wire-up line in `cmd/rutracker/`.
-
-| Package | What it owns | Built on |
-|---|---|---|
-| `cmd/rutracker/` | Entry point: runs the migrations, then the HTTP server. Owns `log/slog` setup, SIGTERM context plumbing and the `-version` flag. | `flag`, `log/slog` |
-| `internal/config/` | Reads `RT_DATABASE_URL` or assembles a DSN from the `POSTGRES_*` env vars. URL-escapes the password via `net/url.UserPassword` so special chars don't break the connection string. | stdlib only |
-| `internal/db/` | Builds the `pgxpool.Pool` and runs goose migrations from an `embed.FS` so the binary needs no external `.sql` files at runtime. Appliers are serialised via `pg_advisory_lock` so concurrent boots can't race the same DDL. | [`pgx/v5`](https://github.com/jackc/pgx), [`pressly/goose`](https://github.com/pressly/goose) |
-| `internal/parser/` | Streams the XML dump. Spawns native `xz -dc --threads=4` via `os/exec` and feeds its stdout to `encoding/xml.Decoder`; for plain `.xml`/`.xml.gz` falls back to a direct read or `compress/gzip`. Emits each `<torrent>` element via callback, including its `<dir>`/`<file>` tree flattened to slash-joined paths. | `encoding/xml`, `os/exec`, `compress/gzip` |
-| `internal/filelist/` | Encodes a torrent's file listing for storage: a compact JSON array of `[path, size]` pairs, deflated. JSON is what the API hands to the browser, so stored bytes decompress straight into the response. Hand-rolled marshaller (the dump carries ~150M entries) with a decompression bound. | `compress/flate`, `encoding/json` |
-| `internal/store/` | The canonical `Torrent` type plus all Postgres reads/writes — `GetStats`, `ListForums`, `Search` (with `ts_rank` + sort whitelist to keep ORDER BY off user input), `Get`, `CopyIngester` (per-worker handle: `SET synchronous_commit=off`, session-local `TEMP TABLE`, `COPY` → `INSERT…SELECT…ON CONFLICT`), and the `parser_runs` lifecycle + `Sweep` (mark-and-sweep deletion of torrents missing from the new dump). | `pgx/v5` |
-| `internal/peers/` | Scrapes seeders/leechers from a logged-in rutracker topic page: holds a `bb_session` cookie, parses the `<span class="seed/leech">` block, re-logins (single-flight) when the cookie dies, and rate-limits every outbound request. Store side (`UpsertPeers`/`GetPeers`/`CountCachedPeers`, `torrent_peers`, `rutracker_session`) lives in `internal/store/`. | `net/http`, [`golang.org/x/sync/singleflight`](https://pkg.go.dev/golang.org/x/sync/singleflight) |
-| `internal/bbcode/` | Tiny BBCode → HTML renderer. HTML-escapes first, drops `[img]` entirely, restricts URL schemes to `http`/`https`/`magnet`/`ftp`, supports `[b/i/u/s/quote/spoiler/list/code/pre]`, and placeholder-protects generated `<a>` tags so bracketed tokens inside URLs survive the tag passes. Unit-tested against XSS-via-raw-HTML, XSS-via-`javascript:` URL and placeholder forgery. | stdlib only |
-| `internal/server/` | `net/http` server (Go 1.22+ pattern routing). Handlers for `/api/*` and `/healthz`, Prometheus at `/metrics` with a per-request `method/route/status_class` middleware and a background gauge refresher (cheap gauges every 30 s; the full-scan content stats only when a new succeeded `parser_run` lands). Middleware chain: access log → metrics → security headers (CSP etc.) → cross-origin guard → gzip → 10 s API deadline. Versioned in-process caches (stats, forums, search totals) keyed on the dump version; `/api/forums` serves a matching ETag. An unknown `/api` path answers a JSON 404; any other unknown path falls back to the embedded Vite `dist/`'s index.html for client-side routing; hashed assets get `immutable` cache headers. | `net/http`, [`prometheus/client_golang`](https://github.com/prometheus/client_golang) |
-| `web/` (Go side) | Single Go file with `//go:embed all:dist` that exposes an `fs.FS` consumed by `server`. The whole SPA ships inside the binary — one image, one container, no static-asset CORS dance. | `embed` |
-
-Each parse worker holds its own `*pgxpool.Conn` for the lifetime of the run; the pool is sized to `numWorkers + 1` so the workers don't fight for a connection. The parser side uses one decoder goroutine and `chan []store.Torrent` (buffered to `numWorkers`) to hand batches off without copying.
-
-## Project layout
-
-```
-cmd/rutracker/        # entry point: migrate, then serve
-internal/
-  bbcode/             # BBCode -> safe HTML renderer + unit tests
-  config/             # env loading + Postgres DSN
-  db/                 # pgxpool + goose migrations (internal/db/migrations, embed.FS)
-  filelist/           # file-listing codec (JSON + deflate) for torrent_files
-  parser/             # streaming XML decoder + native xz spawn
-  peers/              # live seeders/leechers scraper (login + topic-page parse)
-  server/             # net/http handlers, SPA fallback, /metrics middleware
-  store/              # Torrent type, CopyIngester, parser_runs, Sweep, peers, files, queries
-web/                  # Vite + React + Tailwind v4 SPA, embedded into the binary
-grafana/              # importable Grafana dashboard JSON
-Dockerfile            # multi-stage: node → golang → alpine (in the GitHub snapshot)
-```
-
-## Local development
-
-Backend:
-
-```bash
-# from repo root, with a Postgres running somewhere
-export RT_DATABASE_URL='postgres://rutracker:pw@localhost:5432/rutracker?sslmode=disable'
-
-go run ./cmd/rutracker           # migrates, then serves http://localhost:8080
-```
-
-Frontend (separate terminal, hot reload):
-
-```bash
-cd web
-npm ci
-npm run dev                      # http://localhost:5173
-# Vite proxies /api/* to localhost:8080 — set VITE_API_HOST to override.
-```
-
-Tests:
-
-```bash
-go test ./...                    # Postgres integration tests skip without DATABASE_URL (the test DSN, not RT_DATABASE_URL)
-cd web && npx tsc --noEmit && npx eslint .
-```
-
-Linting matches CI: `gofmt -l` over the tracked Go files, `go vet ./...`, `staticcheck ./...`.
-
-## Operations
 
 ### Loading a dump
 
@@ -538,7 +482,17 @@ Dumps are loaded from the **Parser panel in the app** (the database icon in the 
 
 Panel options: the **dump** (a picker over the container's `/dumps` mount), **batch size** (`500` for top-ups, `1000` for a cold full load), and **sweep** — turn it on **only for a full dump** (it deletes torrents missing from the new dump; a partial re-parse with sweep on wipes legitimate rows). A full dump lands in ~14 min.
 
-### Reclaim Postgres bloat (one-shot VACUUM FULL)
+The parse streams the dump through native `xz -dc --threads=4` into `encoding/xml`; one decoder hands batches to four workers, which `COPY` into a session `TEMP` table and merge with `INSERT … ON CONFLICT`, writing a row only when it differs. Each parse worker holds its own `*pgxpool.Conn` for the lifetime of the run; the pool is sized to `numWorkers + 1` so the workers don't fight for a connection. The parser side uses one decoder goroutine and `chan []store.Torrent` (buffered to `numWorkers`) to hand batches off without copying. A sweep deletes what the new dump no longer has, and runs only after xz has exited cleanly, so a truncated dump cannot wipe the table.
+
+### Search and caching
+
+Full-text search runs on a `tsvector` (Russian config) GIN index; a page is an index top-N, the total a separate count. The stats, the forum tree and search totals are cached per dump version — the latest succeeded parse — so they are computed once per dump; `/api/forums` serves the matching ETag. An unknown `/api` path is a JSON 404; any other path falls back to the embedded UI's `index.html`.
+
+### Descriptions
+
+BBCode is rendered to HTML after escaping everything: images are dropped, link schemes are limited to `http`, `https`, `magnet` and `ftp`, and the CSP stops a script should the sanitiser ever slip.
+
+### Reclaiming Postgres bloat
 
 Identical re-parses are no-ops at the heap/TOAST level (see `internal/store/torrents.go` — the `INSERT … ON CONFLICT DO UPDATE … WHERE … IS DISTINCT FROM …` skips writes when nothing changed), so day-to-day TOAST growth is small and autovacuum keeps up. But:
 
@@ -568,13 +522,58 @@ docker compose exec postgres psql -U rutracker -d rutracker -c "
 
 Online alternative — `pg_repack` (via triggers + shadow copy) avoids the exclusive lock at the cost of more disk headroom and an extension install. For a one-off cleanup the simple `VACUUM FULL` is cheaper than setting it up.
 
-## Releases
+## Project layout
 
-Every `vX.Y.Z` tag publishes the image `glowcow/rutracker:vX.Y.Z` on Docker Hub, after the code has passed the linters and the tests against a real Postgres 17.
+| Path | What |
+| --- | --- |
+| `cmd/rutracker` | the entry point: migrate, then serve |
+| `internal/config` | the `RT_` environment and the Postgres DSN |
+| `internal/db` | the pgx pool and the embedded goose migrations |
+| `internal/parser` | the streaming XML decoder and the native xz |
+| `internal/ingest` | a dump load: workers, merge, sweep, progress events |
+| `internal/filelist` | the file-listing codec (JSON and deflate) |
+| `internal/store` | the `Torrent` type and every Postgres read and write |
+| `internal/peers` | the seeders/leechers scraper |
+| `internal/transmission` | the Transmission RPC client |
+| `internal/bbcode` | BBCode to safe HTML |
+| `internal/server` | the HTTP handlers, middleware, parser panel and metrics |
+| `web` | the React UI, embedded into the binary |
+| `grafana` | an importable dashboard |
 
-Each tag also lands here as a [GitHub release](https://github.com/glowcow/rutracker-local/releases): one source-snapshot commit plus notes built from the commit subjects since the previous tag.
+## Build and test
 
-Only the version tag is published — no moving `:latest`. (A `:latest` sharing a digest with the pinned `:vX.Y.Z` is a footgun: `docker system prune -a` on the host strips the version tag off the shared image, leaving a running container floating on an untagged id.)
+In containers, from the repo root — the UI first, then the binary with it embedded, then the image. The image only packages `bin/app`: in this GitHub snapshot its `Dockerfile` is at the root; in the source repo it is the shared one of `g_prjcts/ci-templates`, cloned next to it.
+
+```sh
+docker run --rm -v "$PWD/web":/web -w /web node:26.10.0-alpine3.24 \
+  sh -c 'npm ci && npx tsc -b && npx eslint . && npm run build'
+docker run --rm -v "$PWD":/src -w /src -e CGO_ENABLED=0 glowcow/go-tools:1.27.3-2 \
+  go build -trimpath -ldflags "-X main.version=v0.0.0-dev" -o bin/app ./cmd/rutracker
+docker build --build-arg IMAGE_PORT=8080 -t rutracker:dev .   # the snapshot's Dockerfile
+```
+
+Tests and lint; the store and ingest tests need a Postgres and skip without `DATABASE_URL` (not `RT_DATABASE_URL`):
+
+```sh
+docker network create rt_test
+docker run -d --rm --name rt_test_pg --network rt_test \
+  -e POSTGRES_PASSWORD=test -e POSTGRES_DB=rt_test postgres:17.11-alpine
+docker run --rm --network rt_test -v "$PWD":/src -w /src \
+  -e DATABASE_URL='postgres://postgres:test@rt_test_pg:5432/rt_test?sslmode=disable' \
+  glowcow/go-tools:1.27.3-2 go test -race ./...
+docker run --rm -v "$PWD":/src -w /src glowcow/go-tools:1.27.3-2 \
+  golangci-lint run ./cmd/... ./internal/... ./web
+```
+
+### Local development
+
+The backend against a local Postgres, the frontend in Vite with hot reload; Vite proxies `/api/*` to `localhost:8080` (`VITE_API_HOST` overrides it):
+
+```sh
+RT_DATABASE_URL='postgres://rutracker:pw@localhost:5432/rutracker?sslmode=disable' \
+  go run ./cmd/rutracker        # migrates, then serves http://localhost:8080
+cd web && npm ci && npm run dev  # http://localhost:5173
+```
 
 ## Security model
 
@@ -588,10 +587,8 @@ The app is built for a trusted home network and has **no user accounts**. Only s
 
 Mutations from other origins are rejected (`Sec-Fetch-Site` / `Origin` check), so a random web page can't drive the API through your browser. Do **not** publish the port to the internet as is — put it behind a reverse proxy with authentication (basic auth, an SSO forward-auth, a VPN) if you need remote access.
 
-## Disclaimer
-
-This project ships **no rutracker content**: it is a viewer for the dump that rutracker itself publishes, and the test fixtures are synthetic. Access to rutracker is restricted in some countries — check what applies where you live. The optional peer scraper logs in with your own account and is off by default; using it is subject to rutracker's rules.
-
 ## License
 
 [MIT](LICENSE) © 2026 Anton Sediuk
+
+This project ships **no rutracker content**: it is a viewer for the dump that rutracker itself publishes, and the test fixtures are synthetic. Access to rutracker is restricted in some countries — check what applies where you live. The optional peer scraper logs in with your own account and is off by default; using it is subject to rutracker's rules.

@@ -16,10 +16,8 @@ import (
 	"github.com/glowcow/rutracker-local/internal/store"
 )
 
-// newPeersClient builds the scrape client, or returns nil when the feature is
-// off — either not enabled (RT_PEERS_ENABLED) or no credentials. The
-// last-known cookie is loaded from Postgres so a restart doesn't force a
-// re-login; fresh cookies are persisted back.
+// newPeersClient returns nil when the peers are off or have no login; the
+// cookie lives in Postgres, so a restart need not log in again.
 func newPeersClient(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) *peers.Client {
 	if !cfg.PeersEnabled || cfg.RutrackerUser == "" || cfg.RutrackerPass == "" {
 		return nil
@@ -34,10 +32,8 @@ func newPeersClient(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) 
 		})
 }
 
-// peersResponse is the JSON contract the drawer consumes. seeders/leechers/
-// checked_at are null when nothing is cached; error ("auth" | "unavailable")
-// is set when the freshest scrape attempt failed (a stale cache may still be
-// returned alongside it).
+// peersResponse is what the drawer reads: counts null when none is cached,
+// error when the last scrape failed (a stale cache may come with it).
 type peersResponse struct {
 	Configured bool    `json:"configured"`
 	Seeders    *int    `json:"seeders"`
@@ -56,9 +52,8 @@ func peersBody(p *store.Peers, errCode string) peersResponse {
 	return resp
 }
 
-// peersHandler serves cached peer counts, refreshing from rutracker when the
-// cache is missing or older than ttl. pc == nil (no credentials) → the feature
-// is off and we report configured:false so the UI hides the block.
+// peersHandler serves the cached counts, scraping again past ttl; with no
+// client it reports configured:false.
 func peersHandler(pool *pgxpool.Pool, pc *peers.Client, ttl time.Duration) http.HandlerFunc {
 	// Collapses concurrent refreshes of the same torrent into one scrape.
 	var sf singleflight.Group
@@ -74,9 +69,8 @@ func peersHandler(pool *pgxpool.Pool, pc *peers.Client, ttl time.Duration) http.
 			return
 		}
 
-		// /peers is exempt from the global apiTimeout (a cold re-login + retry
-		// can exceed 10s); bound it ourselves, still tied to the request so a
-		// client disconnect cancels the scrape.
+		// A re-login and a retry can pass apiTimeout's 10 s; the request still
+		// cancels the scrape.
 		ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 		defer cancel()
 

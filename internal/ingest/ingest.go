@@ -1,7 +1,5 @@
-// Package ingest runs a dump parse: the whole pipeline (decode → batch →
-// COPY-upsert → optional sweep) plus parser_runs bookkeeping. Single entry
-// point for the CLI (`rutracker parse`) and the in-app admin endpoint. An
-// optional Emitter streams progress/log/status events (CLI nil; server → SSE).
+// Package ingest runs a dump parse — decode, batch, merge, sweep — with its
+// parser_runs row, and streams its events to an optional Emitter.
 package ingest
 
 import (
@@ -38,9 +36,8 @@ type Result struct {
 	Duration time.Duration
 }
 
-// Progress is a point-in-time snapshot, emitted every few seconds. Percent and
-// ETA are byte-based (the parser doesn't know the total row count up front);
-// Rows is the running count with no denominator.
+// Progress is a snapshot every few seconds; percent and ETA go by bytes, as
+// the row total is not known up front.
 type Progress struct {
 	Pct       float64 `json:"pct"`
 	Rows      int64   `json:"rows"`
@@ -63,9 +60,8 @@ type Event struct {
 	Progress *Progress `json:"progress,omitempty"` // kind=progress
 }
 
-// Emitter receives events. It may be called from multiple goroutines (the
-// progress ticker runs alongside the workers), so implementations must be safe
-// for concurrent use. A nil Emitter is a no-op.
+// Emitter receives the events from several goroutines and must be safe for
+// that; nil discards them.
 type Emitter func(Event)
 
 func (e Emitter) send(ev Event) {
@@ -93,10 +89,8 @@ func (c *countingReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// Run streams the dump at opts.Source into Postgres and (optionally) sweeps
-// rows the dump no longer contains. It opens its own pgxpool sized to the
-// worker count so parse connections never contend with the server's request
-// pool. Blocks until the run finishes; honours ctx cancellation.
+// Run streams opts.Source into Postgres and, with Sweep, deletes what the dump
+// lacks; its own pool keeps the parse off the server's connections.
 func Run(ctx context.Context, databaseURL string, opts Options, emit Emitter) (Result, error) {
 	if opts.Source == "" {
 		return Result{}, errors.New("source is required")
@@ -104,9 +98,7 @@ func Run(ctx context.Context, databaseURL string, opts Options, emit Emitter) (R
 	if opts.NumWorkers < 1 {
 		opts.NumWorkers = 4
 	}
-	// A non-positive batch size would panic in make() inside the decoder
-	// goroutine — after StartParserRun already inserted its row, orphaning a
-	// `running` entry.
+	// A batch size below 1 would panic the decoder after the run row exists.
 	if opts.BatchSize < 1 {
 		opts.BatchSize = 500
 	}
@@ -139,7 +131,7 @@ func Run(ctx context.Context, databaseURL string, opts Options, emit Emitter) (R
 	if err != nil {
 		return Result{}, fmt.Errorf("open %s: %w", resolved, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	st, err := f.Stat()
 	if err != nil {
@@ -152,12 +144,10 @@ func Run(ctx context.Context, databaseURL string, opts Options, emit Emitter) (R
 	if err != nil {
 		return Result{}, err
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 
-	// Pull the sweep cutoff from postgres BEFORE any ingest query fires. Using
-	// the db clock (not Go's) keeps the "untouched before this run" comparison
-	// safe across host/db clock skew — every NOW() the parse touches after this
-	// is guaranteed ≥ sweepCutoff.
+	// The cutoff comes from the database before any write, so clock skew cannot
+	// make the sweep delete rows this run touched.
 	var sweepCutoff time.Time
 	if opts.Sweep {
 		sweepCutoff, err = store.ParseStartNow(ctx, pool)
@@ -188,9 +178,8 @@ func Run(ctx context.Context, databaseURL string, opts Options, emit Emitter) (R
 	start := time.Now()
 	var total atomic.Int64
 
-	// Pipeline: 1 decoder pushes batches into a buffered channel; N workers each
-	// own a CopyIngester (one pgx connection + session-local TEMP table) and
-	// consume from the same channel. errgroup propagates the first error.
+	// One decoder feeds batches to N workers, each with its own CopyIngester;
+	// errgroup carries the first error.
 	g, gctx := errgroup.WithContext(ctx)
 	batches := make(chan []store.Torrent, opts.NumWorkers)
 
@@ -269,10 +258,8 @@ func Run(ctx context.Context, databaseURL string, opts Options, emit Emitter) (R
 	stopProgress()
 	<-progressDone
 
-	// Reap the decompressor and fold its exit status into the verdict BEFORE
-	// deciding success — a truncated .xz that ends on a clean XML boundary
-	// leaves the exit code as the only failure signal, and the next step on the
-	// success path is the sweep (deleting rows).
+	// xz's exit status decides before the sweep: a truncated dump that ends on
+	// a clean XML boundary fails only there.
 	if closeErr := src.Close(); closeErr != nil && waitErr == nil {
 		waitErr = closeErr
 	}
@@ -294,9 +281,7 @@ func Run(ctx context.Context, databaseURL string, opts Options, emit Emitter) (R
 	}
 	slog.Info("parse done", "rows", rows, "duration_s", int64(dur.Seconds()), "rate_rows_s", rate)
 	emit.log("info", "parse done", fmt.Sprintf("rows=%d  %s  %d/s", rows, fmtDur(int64(dur.Seconds())), rate))
-	// Final 100% snapshot so the panel shows completed stats (rows/rate/bar)
-	// even when the parse finished before the 5 s progress ticker ever fired —
-	// which is every small dump.
+	// A last snapshot at 100%: a small dump ends before the 5 s ticker fires.
 	mb := totalBytes / (1 << 20)
 	emit.send(Event{Kind: "progress", Progress: &Progress{
 		Pct: 100, Rows: rows, ReadMB: mb, TotalMB: mb,
@@ -325,10 +310,8 @@ func Run(ctx context.Context, databaseURL string, opts Options, emit Emitter) (R
 	return Result{RunID: runID, Rows: rows, Swept: swept, Duration: dur}, nil
 }
 
-// snapshot computes a progress reading. Percent/ETA are measured by compressed
-// bytes read from the source file (the only quantity whose total is known up
-// front); xz reads forward roughly proportionally to records yielded, so the
-// percent is a fair approximation. Plain .xml / .gz: exact.
+// snapshot measures progress by compressed bytes read, the one known total;
+// xz yields records roughly in step with them.
 func snapshot(start, now time.Time, rows, readBytes, totalBytes int64) Progress {
 	elapsed := now.Sub(start)
 	pct := 0.0

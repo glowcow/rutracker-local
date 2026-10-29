@@ -1,3 +1,4 @@
+// Package server serves the UI, the JSON API, the parser panel and /metrics.
 package server
 
 import (
@@ -41,10 +42,8 @@ func Run(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) error {
 	mux.Handle("DELETE /api/favorites/{id}", removeFavoriteHandler(pool))
 	mux.Handle("DELETE /api/favorites", clearFavoritesHandler(pool))
 
-	// Admin — parser control. Read endpoints (dumps/runs/status/stream) are
-	// open on the LAN; only the mutating start is gated by requireAdmin.
-	// The parse runs on `ctx` (server lifetime) so a shutdown cancels an
-	// in-flight parse.
+	// The parser panel: only starting a parse needs the token; the parse
+	// runs on ctx, so a shutdown cancels it.
 	ctrl := newParseController(ctx, cfg)
 	mux.Handle("GET /api/admin/dumps", dumpsHandler(cfg.DumpDir))
 	mux.Handle("GET /api/admin/parse/runs", parseRunsHandler(pool))
@@ -52,31 +51,27 @@ func Run(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) error {
 	mux.Handle("GET /api/admin/parse/stream", parseStreamHandler(ctrl))
 	mux.Handle("POST /api/admin/parse", requireAdmin(cfg.AdminToken, parseStartHandler(ctrl, cfg.DumpDir)))
 
-	// Any other /api path: without this the SPA fallback below would answer
-	// it with index.html and a 200. Per method — a bare "/api/" conflicts with "GET /".
+	// Any other /api path is a JSON 404, not the SPA; per method, as a bare
+	// "/api/" conflicts with "GET /".
 	for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodDelete} {
 		mux.Handle(m+" /api/", apiNotFound())
 	}
 
-	// SPA: serve the embedded Vite dist/. The catch-all `GET /` falls back to
-	// index.html for any URL that doesn't match a real file — supports
-	// in-app routing on refresh without us having to know the route table.
-	distFS, err := web.Dist()
-	if err != nil {
-		return err
+	// Unknown paths get index.html, so the SPA's routes survive a reload.
+	if distFS, ok := web.Dist(); ok {
+		mux.Handle("GET /", spaHandler(distFS))
+	} else {
+		slog.Warn("ui not built into this binary, serving the api only")
 	}
-	mux.Handle("GET /", spaHandler(distFS))
 
 	srv := &http.Server{
 		Addr: cfg.HTTPAddr,
-		// Outer→inner: accessLog → metrics → securityHeaders → crossOriginGuard
-		// → gzip → apiTimeout → mux. gzip low so loggers see the real status;
-		// apiTimeout innermost so the deadline covers handler work, not streaming.
+		// Outermost first; gzip sits low so the loggers see the real status,
+		// apiTimeout covers the handler's work, not the streaming.
 		Handler: accessLog(metrics(securityHeaders(
 			crossOriginGuard(gzipMiddleware(apiTimeout(mux)))))),
 		ReadHeaderTimeout: 5 * time.Second,
-		// A slow client mustn't hold a connection forever; Write has headroom
-		// for the API deadline plus streaming the gzipped bundle over a bad link.
+		// Write leaves room for the API deadline and a slow bundle download.
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  120 * time.Second,
@@ -94,6 +89,7 @@ func Run(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) error {
 		slog.Info("reconciled orphaned parser runs", "count", n)
 	}
 
+	slog.Info("listening", "addr", cfg.HTTPAddr)
 	errCh := make(chan error, 1)
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -113,9 +109,8 @@ func Run(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) error {
 	}
 }
 
-// securityHeaders: CSP is load-bearing — torrent descriptions are untrusted
-// dump HTML (sanitised by bbcode); default-src 'self' neutralises XSS if a
-// sanitiser edit slips. style-src 'unsafe-inline' stays for React style props.
+// securityHeaders sets the CSP that contains XSS should the bbcode sanitiser
+// slip on a dump's description; inline styles stay for React.
 func securityHeaders(next http.Handler) http.Handler {
 	const csp = "default-src 'self'; style-src 'self' 'unsafe-inline'; " +
 		"img-src 'self' data:; object-src 'none'; base-uri 'self'; " +
@@ -129,14 +124,13 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-// apiTimeout bounds /api/* handler work so a pathological query can't hold a
-// pooled connection forever and starve other requests. Non-API paths pass through.
+// apiTimeout bounds /api/* work, so a pathological query cannot hold a pooled
+// connection.
 func apiTimeout(next http.Handler) http.Handler {
 	const deadline = 10 * time.Second
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// The SSE stream is a long-lived response — the 10 s deadline would
-		// kill it; /peers can outlast 10s too (re-login + scrape). Both bound
-		// their own lifetime via the request context.
+		// The event stream and /peers (a re-login and a scrape) outlive 10 s
+		// and bound themselves through the request's context.
 		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != parseStreamPath && !strings.HasSuffix(r.URL.Path, "/peers") {
 			ctx, cancel := context.WithTimeout(r.Context(), deadline)
 			defer cancel()
@@ -146,9 +140,8 @@ func apiTimeout(next http.Handler) http.Handler {
 	})
 }
 
-// crossOriginGuard rejects cross-origin mutations: POST favorites is a CORS
-// "simple request" any page can blind-fire, so we check Sec-Fetch-Site/Origin.
-// Same-origin and header-less clients (curl) pass untouched.
+// crossOriginGuard rejects cross-origin mutations, which any page could fire
+// as simple requests; same-origin and header-less clients pass.
 func crossOriginGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -156,8 +149,8 @@ func crossOriginGuard(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		// "none" = address bar, "same-origin" = the SPA; "same-site" is rejected
-		// on purpose (sibling subdomains shouldn't mutate favorites).
+		// "none" is the address bar; "same-site" is refused, so a sibling
+		// subdomain cannot change favourites.
 		if site := r.Header.Get("Sec-Fetch-Site"); site != "" &&
 			site != "same-origin" && site != "none" {
 			writeJSON(w, http.StatusForbidden, errResp("cross-origin request rejected"))
@@ -208,13 +201,8 @@ func spaHandler(distFS fs.FS) http.Handler {
 		if path == "" {
 			path = "index.html"
 		}
-		// Cache policy by path class. embed.FS files carry a zero ModTime,
-		// so http.FileServer emits no Last-Modified/ETag validators at all —
-		// without explicit Cache-Control the browser re-downloads the full
-		// bundle every visit. Vite asset names are content-hashed → safe to
-		// pin forever; index.html (which references them) must revalidate
-		// every load or deploys wouldn't propagate; favicons are unhashed
-		// but effectively static → a day.
+		// embed.FS has no ModTime, so no validators: hashed assets are
+		// immutable, index.html revalidates, the rest keeps a day.
 		switch {
 		case strings.HasPrefix(path, "assets/"):
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
@@ -229,7 +217,7 @@ func spaHandler(distFS fs.FS) http.Handler {
 				http.NotFound(w, r)
 				return
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 			w.Header().Set("Cache-Control", "no-cache")
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			_, _ = io.Copy(w, f)
@@ -270,7 +258,6 @@ func (s *statusRecorder) WriteHeader(code int) {
 	s.ResponseWriter.WriteHeader(code)
 }
 
-// Unwrap lets http.ResponseController reach the underlying ResponseWriter
-// (through both accessLog's and metrics' statusRecorder wrappers) so the SSE
-// handler can Flush and clear its write deadline.
+// Unwrap lets http.ResponseController reach the writer below the recorders,
+// so the event stream can flush and clear its deadline.
 func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }

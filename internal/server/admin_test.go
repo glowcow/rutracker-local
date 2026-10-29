@@ -82,7 +82,7 @@ func TestParseHubReplayAndLive(t *testing.T) {
 		t.Fatal("expected a live event on the subscriber channel")
 	}
 
-	// reset clears the buffer for the next run; a fresh subscriber sees nothing.
+	// reset empties the buffer: a new subscriber sees nothing.
 	h.reset()
 	replay2, _, cancel2 := h.subscribe()
 	defer cancel2()

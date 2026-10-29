@@ -14,9 +14,7 @@ import (
 	"time"
 )
 
-// ErrDuplicate — the daemon already has this torrent (result arguments carry
-// "torrent-duplicate" instead of "torrent-added"). Not a failure; the caller
-// surfaces it as "already queued".
+// ErrDuplicate: the daemon already has the torrent, shown as already queued.
 var ErrDuplicate = errors.New("torrent already added")
 
 // Client talks to one Transmission RPC endpoint. The session id is cached and
@@ -115,7 +113,7 @@ func (c *Client) post(ctx context.Context, body []byte) ([]byte, int, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if c.host != "" {
-		req.Host = c.host // Host header, not req.Header (net/http reads req.Host)
+		req.Host = c.host // net/http sends req.Host, not a Host header
 	}
 	if c.user != "" {
 		req.SetBasicAuth(c.user, c.pass)
@@ -131,7 +129,7 @@ func (c *Client) post(ctx context.Context, body []byte) ([]byte, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusConflict {
 		if fresh := resp.Header.Get("X-Transmission-Session-Id"); fresh != "" {

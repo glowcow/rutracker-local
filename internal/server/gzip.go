@@ -9,14 +9,8 @@ import (
 	"sync"
 )
 
-// Hand-rolled gzip middleware — ~80 lines beats a dependency for a single
-// content-encoding. Biggest wins: /api/forums (~70 KB JSON → ~8 KB) and the
-// JS bundle (~480 KB → ~150 KB), both previously served raw.
-
-// gzipPool recycles writers across requests — each gzip.Writer holds ~1 MB
-// of window buffers, which would otherwise be reallocated per response.
-// BestSpeed: at LAN sizes the ratio difference vs DefaultCompression is a
-// few percent, the CPU difference is ~3×.
+// gzipPool reuses the writers, each about 1 MB of window; BestSpeed costs a
+// few percent of ratio and saves three times the CPU.
 var gzipPool = sync.Pool{
 	New: func() any {
 		w, _ := gzip.NewWriterLevel(io.Discard, gzip.BestSpeed)
@@ -47,9 +41,7 @@ func isCompressible(contentType string) bool {
 
 func gzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// The SSE stream must reach the raw ResponseWriter unbuffered — the
-		// gzip wrapper would both buffer chunks and block ResponseController's
-		// Flush. Skip it entirely for that path.
+		// The event stream must reach the writer unbuffered for its flushes.
 		if r.URL.Path == parseStreamPath {
 			next.ServeHTTP(w, r)
 			return
@@ -67,9 +59,8 @@ func gzipMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// gzipResponseWriter defers the compress-or-not decision until the response
-// headers are final (first Write / WriteHeader): only then are Content-Type
-// and Content-Length known.
+// gzipResponseWriter decides at the first write, when Content-Type and
+// Content-Length are known.
 type gzipResponseWriter struct {
 	http.ResponseWriter
 	gz      *gzip.Writer // non-nil once compression is enabled

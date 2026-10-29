@@ -1,6 +1,5 @@
-// Package parser streams a rutracker XML dump (optionally xz-compressed) and
-// emits torrent records via a callback. The caller is responsible for
-// batching emitted records into the store.
+// Package parser streams a RuTracker XML dump, plain, xz or gzip, and hands
+// each torrent to a callback.
 package parser
 
 import (
@@ -19,9 +18,8 @@ import (
 	"github.com/glowcow/rutracker-local/internal/store"
 )
 
-// ResolveSource returns a concrete path. A glob (* ? []) selects the newest-mtime
-// match (mtime beats lexical order — survives renames / partial downloads); a
-// plain path is returned as-is (non-existence surfaces later in ParseFile's Open).
+// ResolveSource returns path, or the newest file a glob matches (by mtime,
+// which survives renames and partial downloads).
 func ResolveSource(pattern string) (string, error) {
 	if !strings.ContainsAny(pattern, "*?[") {
 		return pattern, nil
@@ -53,9 +51,8 @@ func ResolveSource(pattern string) (string, error) {
 	return newest, nil
 }
 
-// xmlTorrent mirrors a <torrent> element. The dump nests a second
-// <torrent hash tracker_id/> inside it (the infohash) — decoded via Inner.
-// The misspelled `registred_at` attr is ignored (unixts is canonical).
+// xmlTorrent is a <torrent>; the infohash is the nested <torrent hash/>, and
+// the misspelled registred_at is ignored for unixts.
 type xmlTorrent struct {
 	XMLName xml.Name `xml:"torrent"`
 	ID      int64    `xml:"id,attr"`
@@ -89,10 +86,8 @@ type xmlFile struct {
 	Size int64  `xml:"size,attr"`
 }
 
-// flattenFiles walks the tree depth-first into slash-joined paths ("/" is the
-// torrent path separator, so it cannot occur inside a name). Files come before
-// subdirectories at each level — encoding/xml splits the two into separate
-// slices, losing their original interleaving.
+// flattenFiles joins the tree into slash paths, files before directories:
+// encoding/xml has already split the two apart.
 func flattenFiles(prefix string, dirs []xmlDir, files []xmlFile, out []filelist.File) []filelist.File {
 	for _, f := range files {
 		out = append(out, filelist.File{Path: prefix + f.Name, Size: f.Size})
@@ -107,9 +102,8 @@ func flattenFiles(prefix string, dirs []xmlDir, files []xmlFile, out []filelist.
 // aborts parsing. Returning context.Canceled etc. propagates up.
 type Emit func(store.Torrent) error
 
-// Parse reads XML from r and calls emit for each <torrent> element. r must
-// already be the raw XML stream — if you have an .xz file, use ParseFile or
-// wrap the reader manually with xz.NewReader.
+// Parse calls emit for every <torrent> of the raw XML in r; ParseFile
+// decompresses.
 func Parse(r io.Reader, emit Emit) error {
 	dec := xml.NewDecoder(r)
 	for {
@@ -130,9 +124,7 @@ func Parse(r io.Reader, emit Emit) error {
 			return fmt.Errorf("decode torrent (offset %d): %w", dec.InputOffset(), err)
 		}
 
-		// After DecodeElement consumes the outer <torrent>, the inner
-		// <torrent hash=.../> is already inside that span — the next iteration
-		// won't see it as a separate token. No filter needed.
+		// DecodeElement consumed the nested <torrent hash/> with the outer.
 
 		if err := emit(store.Torrent{
 			ID:           x.ID,
@@ -150,32 +142,29 @@ func Parse(r io.Reader, emit Emit) error {
 	}
 }
 
-// ParseFile opens path and pipes the right decoder chain in front of Parse:
-//
-//	*.xml      → plain
-//	*.xml.xz   → exec `xz -dc` (native libxz; pure-Go decode was too slow)
-//	*.xml.gz   → gzip.NewReader (rarely used, but cheap to support)
-//
-// The file and decompressor are closed before ParseFile returns.
+// ParseFile parses a .xml, a .xml.xz (through native xz, pure Go was too slow)
+// or a .xml.gz, and closes them before it returns.
 func ParseFile(path string, emit Emit) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	r, err := decompressorFor(path, f)
 	if err != nil {
 		return err
 	}
-	defer r.Close()
-	return Parse(r, emit)
+	// Close reaps xz: a truncated dump shows only in its exit status.
+	err = Parse(r, emit)
+	if cerr := r.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
-// DecompressorFor returns a ReadCloser of decompressed XML. cmd/parse wraps the
-// raw file with a byte counter BEFORE this, so the counter reflects compressed
-// bytes read (the only total known up-front, for % / ETA). Caller MUST Close —
-// for .xz that reaps the xz process and propagates a non-zero exit.
+// DecompressorFor decompresses src by path's extension; Close must be called,
+// for .xz it reaps xz and reports its exit status.
 func DecompressorFor(path string, src io.Reader) (io.ReadCloser, error) {
 	return decompressorFor(path, src)
 }
@@ -195,10 +184,8 @@ func decompressorFor(path string, src io.Reader) (io.ReadCloser, error) {
 	}
 }
 
-// xzReader wraps an `xz -dc` subprocess: stdin takes the compressed bytes (so
-// the caller's countingReader still measures real bytes for progress %), stdout
-// is the decompressed XML. --threads=4 is a no-op on single-stream .xz but adds
-// parallel decode if the dump ever becomes multi-block.
+// xzReader runs xz -dc on the caller's reader, so a counting reader still sees
+// the compressed bytes; --threads helps a multi-block dump.
 type xzReader struct {
 	cmd    *exec.Cmd
 	stdout io.ReadCloser

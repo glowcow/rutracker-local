@@ -14,9 +14,8 @@ import (
 	"github.com/glowcow/rutracker-local/internal/filelist"
 )
 
-// torrentCols enumerates the input columns (no GENERATED search_vec). Shared
-// between the COPY stage table DDL and the INSERT...SELECT column list so the
-// two can never drift.
+// torrentCols are the input columns, no generated search_vec; the stage DDL
+// and the INSERT…SELECT share them, so the two cannot drift.
 var torrentCols = []string{
 	"id", "title", "forum_id", "forum_name",
 	"size_bytes", "registered_at", "hash", "content",
@@ -25,9 +24,8 @@ var torrentCols = []string{
 // torrentFileCols mirrors torrentCols for the companion listing table.
 var torrentFileCols = []string{"torrent_id", "files_count", "files"}
 
-// Torrent is the shared in-memory representation used by parser, store, and
-// (eventually) the HTTP handlers. Field order matches the SQL columns we
-// INSERT below so adding/removing a field is a one-line change.
+// Torrent is one dump entry as the parser, the store and the API see it;
+// fields follow the SQL columns.
 type Torrent struct {
 	ID           int64     `json:"id"`
 	Title        string    `json:"title"`
@@ -39,35 +37,29 @@ type Torrent struct {
 	// Content is omitted from list responses (too heavy); single-torrent
 	// endpoints will explicitly include it (rendered HTML).
 	Content string `json:"-"`
-	// Peers — cached seeders/leechers joined from torrent_peers on list reads.
-	// Nil when a torrent has never been checked; omitted from JSON so unchecked
-	// rows stay lean. PeersCheckedAt lets the UI grey out values past the TTL.
+	// Cached peer counts, nil until first checked; PeersCheckedAt lets the UI
+	// grey out values older than the TTL.
 	Seeders        *int       `json:"seeders,omitempty"`
 	Leechers       *int       `json:"leechers,omitempty"`
 	PeersCheckedAt *time.Time `json:"peers_checked_at,omitempty"`
 	// Files is the dump's file listing, flattened to slash-joined paths. Never
 	// serialised with the torrent — the drawer pulls it from its own endpoint.
 	Files []filelist.File `json:"-"`
-	// FilesCount comes from the companion table on single-torrent reads, so the
-	// drawer can label its (collapsed) Files section without fetching the tree.
-	// Nil on list reads and when the dump carried no listing.
+	// FilesCount labels the drawer's folded file list without the tree; nil on
+	// list reads and for a dump without listings.
 	FilesCount *int `json:"files_count,omitempty"`
 }
 
-// CopyIngester is a per-worker ingestion handle: it holds one pooled connection
-// for its lifetime so session state (synchronous_commit=off, TEMP stage table)
-// outlives each Ingest call. NOT safe for concurrent use — one per goroutine.
+// CopyIngester holds one connection, whose session keeps its settings and the
+// TEMP stage table across Ingest calls; one per goroutine.
 type CopyIngester struct {
 	conn            *pgxpool.Conn
 	stageTable      pgx.Identifier
 	filesStageTable pgx.Identifier
 }
 
-// NewCopyIngester acquires a pooled conn, sets synchronous_commit=off, and
-// creates a session-local TEMP stage table (no GENERATED tsvector — that
-// materialises only on the final INSERT). sync_commit=off drops the per-COMMIT
-// fsync — safe because a bulk reload is idempotent (re-parse on crash), and
-// it's the biggest throughput win here. Caller must Close to release the conn.
+// NewCopyIngester takes a connection with synchronous_commit off (a reload is
+// idempotent) and its own stage table; Close releases it.
 func NewCopyIngester(ctx context.Context, pool *pgxpool.Pool) (*CopyIngester, error) {
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
@@ -77,10 +69,7 @@ func NewCopyIngester(ctx context.Context, pool *pgxpool.Pool) (*CopyIngester, er
 		conn.Release()
 		return nil, fmt.Errorf("set sync_commit: %w", err)
 	}
-	// TEMP TABLE name is per-session — concurrent ingesters can reuse the
-	// same identifier without collision. ON COMMIT PRESERVE ROWS isn't
-	// needed (we run outside an explicit txn) but is harmless and documents
-	// intent.
+	// A TEMP table is per session, so every ingester can use the same name.
 	const stageDDL = `
 	CREATE TEMP TABLE IF NOT EXISTS torrents_stage (
 		id            BIGINT,
@@ -122,10 +111,8 @@ func (c *CopyIngester) Close() {
 	}
 }
 
-// Step 1 of the two-step ingest: write a row only when it differs from the dump
-// — identical re-parses (~95%+ in steady state) are no-ops at the heap/TOAST
-// level. last_seen_at = SQL NOW() (not COPY'd) so every merged row gets a fresh
-// timestamp.
+// copyIngestMerge writes a row only when it differs from the dump, so a
+// re-parse touches almost nothing; last_seen_at is the database's NOW().
 const copyIngestMerge = `
 INSERT INTO torrents (id, title, forum_id, forum_name, size_bytes, registered_at, hash, content, last_seen_at)
 SELECT id, title, forum_id, forum_name, size_bytes, registered_at, hash, content, NOW()
@@ -149,18 +136,15 @@ WHERE
 	OR torrents.content       IS DISTINCT FROM EXCLUDED.content
 `
 
-// Step 2 — heap-only UPDATE that bumps last_seen_at on every input id.
-// Needed because step 1's WHERE clause skips no-op rows entirely, which
-// would otherwise leave their last_seen_at stale and let Sweep mistake
-// them for vanished entries.
+// copyIngestBumpSeen touches last_seen_at of rows the merge skipped, or the
+// sweep would take them for gone.
 const copyIngestBumpSeen = `
 UPDATE torrents SET last_seen_at = NOW()
 WHERE id IN (SELECT id FROM torrents_stage)
 `
 
-// File listings are merged the same way as step 1: identical blobs are left
-// alone, so a re-parse of the same dump doesn't rewrite ~2.8M TOAST entries.
-// No last_seen_at here — the FK cascade from torrents is what expires rows.
+// copyIngestMergeFiles leaves identical listings alone, as the merge does;
+// the cascade from torrents expires them.
 const copyIngestMergeFiles = `
 INSERT INTO torrent_files (torrent_id, files_count, files)
 SELECT torrent_id, files_count, files
@@ -171,9 +155,8 @@ ON CONFLICT (torrent_id) DO UPDATE SET
 WHERE torrent_files.files IS DISTINCT FROM EXCLUDED.files
 `
 
-// Ingest writes the batch into Postgres via COPY → INSERT...ON CONFLICT.
-// The stage table is truncated at the end so the next batch starts empty.
-// Returns the number of rows merged.
+// Ingest merges the batch through COPY and INSERT…ON CONFLICT and returns the
+// rows merged; the stage table is emptied after.
 func (c *CopyIngester) Ingest(ctx context.Context, batch []Torrent) (int, error) {
 	if len(batch) == 0 {
 		return 0, nil
@@ -209,10 +192,8 @@ func (c *CopyIngester) Ingest(ctx context.Context, batch []Torrent) (int, error)
 	return int(n), nil
 }
 
-// ingestFiles compresses each torrent's listing and merges the batch into
-// torrent_files. Torrents without a listing (older dumps carry none) are
-// skipped rather than stored empty, so "no row" stays the single signal the
-// API reads as "this dump had no file data".
+// ingestFiles stores each listing compressed; a torrent without one gets no
+// row, which the API reads as "no file data".
 func (c *CopyIngester) ingestFiles(ctx context.Context, batch []Torrent) error {
 	type row struct {
 		id    int64
@@ -251,9 +232,8 @@ func (c *CopyIngester) ingestFiles(ctx context.Context, batch []Torrent) error {
 	return nil
 }
 
-// GetFiles returns a torrent's stored listing: the compressed blob and the
-// true file count. ErrNotFound means the dump carried no listing for it (or
-// the torrent itself is gone) — the drawer then hides the section.
+// GetFiles returns the compressed listing and the true file count;
+// ErrNotFound when the dump had none.
 func GetFiles(ctx context.Context, pool *pgxpool.Pool, id int64) ([]byte, int, error) {
 	var (
 		blob  []byte
@@ -271,9 +251,8 @@ func GetFiles(ctx context.Context, pool *pgxpool.Pool, id int64) ([]byte, int, e
 	return blob, count, nil
 }
 
-// ParseStartNow returns the postgres-side "now", used as the Sweep cutoff.
-// Using the db clock (not Go's) sidesteps skew: every NOW() the parse touches
-// is ≥ this, so Sweep won't clobber rows it just updated.
+// ParseStartNow is the database's now, the sweep cutoff: every NOW() of the
+// parse is later, whatever the clocks say.
 func ParseStartNow(ctx context.Context, pool *pgxpool.Pool) (time.Time, error) {
 	var t time.Time
 	if err := pool.QueryRow(ctx, `SELECT NOW()`).Scan(&t); err != nil {
@@ -282,10 +261,8 @@ func ParseStartNow(ctx context.Context, pool *pgxpool.Pool) (time.Time, error) {
 	return t, nil
 }
 
-// Sweep deletes torrents whose last_seen_at is older than `before` — i.e.,
-// rows that no longer exist in the current dump. Returns the number of rows
-// deleted. Intended to be called once at the end of a full parse, with
-// `before` set to the value of ParseStartNow taken before the parse began.
+// Sweep deletes the torrents a full parse did not see since before, its
+// ParseStartNow, and returns how many.
 func Sweep(ctx context.Context, pool *pgxpool.Pool, before time.Time) (int64, error) {
 	cmd, err := pool.Exec(ctx, `DELETE FROM torrents WHERE last_seen_at < $1`, before)
 	if err != nil {
@@ -335,17 +312,14 @@ type Stats struct {
 	ForumsCount    int64 `json:"forums_count"`
 }
 
-// TableBloat is what pg_stat_user_tables tracks per relation. The ratio
-// `Dead / (Live + Dead)` is the standard signal for autovacuum keeping up
-// — once it pushes past ~20% with no downward trend, consider VACUUM FULL.
+// TableBloat is a relation's live and dead tuples; dead/(live+dead) above 20%
+// that does not fall back means autovacuum is behind.
 type TableBloat struct {
 	LiveTuples int64
 	DeadTuples int64
 }
 
-// GetTableBloat reads n_live_tup / n_dead_tup from pg_stat_user_tables for
-// the given relation. These are statistics-collector estimates, refreshed
-// by analyze/autoanalyze, not exact counts — good enough as a bloat trend.
+// GetTableBloat reads the estimates of pg_stat_user_tables for name.
 func GetTableBloat(ctx context.Context, pool *pgxpool.Pool, name string) (TableBloat, error) {
 	var b TableBloat
 	err := pool.QueryRow(ctx, `
@@ -359,9 +333,7 @@ func GetTableBloat(ctx context.Context, pool *pgxpool.Pool, name string) (TableB
 	return b, nil
 }
 
-// DatabaseSizeBytes wraps pg_database_size — total on-disk footprint for
-// the current database (heap + indexes + TOAST + dead space). Useful for
-// noticing a slow drift up between parses even when row counts are flat.
+// DatabaseSizeBytes is pg_database_size: heap, indexes, TOAST and dead space.
 func DatabaseSizeBytes(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
 	var n int64
 	err := pool.QueryRow(ctx, `SELECT pg_database_size(current_database())`).Scan(&n)
@@ -371,9 +343,7 @@ func DatabaseSizeBytes(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
 	return n, nil
 }
 
-// GetStats does one full scan. Acceptable up to a few tens of millions on
-// homelab hardware; if it gets slow we'll cache in a meta row maintained by
-// the parser.
+// GetStats scans the whole table, fine for a few tens of millions of rows.
 func GetStats(ctx context.Context, pool *pgxpool.Pool) (Stats, error) {
 	var s Stats
 	err := pool.QueryRow(ctx, `
@@ -418,9 +388,7 @@ func ListForums(ctx context.Context, pool *pgxpool.Pool) ([]Forum, error) {
 	return out, rows.Err()
 }
 
-// SearchParams is the read-side request shape. All filter fields use the
-// zero value as "no filter" (forum_id=0 means "any forum", etc). Frontend
-// passes only the fields the user has set.
+// SearchParams is a search request; a zero field is no filter.
 type SearchParams struct {
 	Query   string
 	ForumID int32
@@ -444,18 +412,15 @@ var (
 	validDir  = map[string]bool{"asc": true, "desc": true}
 )
 
-// maxOffset bounds how deep pagination can reach: OFFSET is O(n) in postgres,
-// so an arbitrary value lets one request scan/sort the whole table. 100k rows
-// (2000 pages) is far beyond anything a human pages through.
+// maxOffset bounds paging: OFFSET is linear in postgres, and 2000 pages is
+// more than anyone reads.
 const maxOffset = 100_000
 
 // maxQueryLen bounds the raw search string before it hits plainto_tsquery.
 const maxQueryLen = 256
 
-// searchFilter builds the shared WHERE + args (Search/CountSearch). Conditions
-// are appended only when set — the old catch-all ($1=” OR search_vec @@ q.q)
-// couldn't use an index on browse and risked a generic-plan seq-scan under pgx
-// prepared statements. $1 always feeds the tsquery CTE.
+// searchFilter builds the WHERE of Search and CountSearch from the set filters
+// only: a catch-all predicate defeats the index under prepared statements.
 func searchFilter(query string, forumID int32) (where string, args []any) {
 	args = []any{query}
 	var conds []string
@@ -481,9 +446,8 @@ func clampQuery(query string) string {
 	return query
 }
 
-// Search returns up to Limit page rows. The total lives in CountSearch on
-// purpose: COUNT(*) OVER () here would materialise every match before LIMIT
-// (the empty-query browse scanned all ~2.8M rows per page instead of 50).
+// Search returns one page; COUNT(*) OVER () here would materialise every
+// match before LIMIT, so the total is CountSearch's.
 func Search(ctx context.Context, pool *pgxpool.Pool, p SearchParams) ([]Torrent, error) {
 	if !validSort[p.Sort] {
 		p.Sort = "date"
@@ -518,9 +482,8 @@ func Search(ctx context.Context, pool *pgxpool.Pool, p SearchParams) ([]Torrent,
 
 	where, args := searchFilter(p.Query, p.ForumID)
 	args = append(args, p.Limit, p.Offset)
-	// LEFT JOIN the live peer cache so list rows carry seeders/leechers when
-	// known. The join goes on torrents (not q) — the comma-cross with q stays
-	// to the right so precedence keeps `(torrents LEFT JOIN torrent_peers), q`.
+	// The peer cache joins torrents, not q, so the precedence stays
+	// (torrents LEFT JOIN torrent_peers), q.
 	sql := fmt.Sprintf(`
 		WITH q AS (SELECT plainto_tsquery('russian', $1) AS q)
 		SELECT id, title, forum_id, forum_name, size_bytes, registered_at, hash,
@@ -552,10 +515,8 @@ func Search(ctx context.Context, pool *pgxpool.Pool, p SearchParams) ([]Torrent,
 	return items, rows.Err()
 }
 
-// CountSearch returns the total number of rows matching the same filters
-// Search applies. Split from Search so the handler can cache it per dump
-// version — and so an offset past the last row still reports the real total
-// (the old COUNT(*) OVER () form returned 0 there: no rows, no window).
+// CountSearch counts Search's matches; apart, the handler caches it per dump
+// and an offset past the end still gets the real total.
 func CountSearch(ctx context.Context, pool *pgxpool.Pool, query string, forumID int32) (int64, error) {
 	where, args := searchFilter(clampQuery(query), forumID)
 	sql := fmt.Sprintf(`

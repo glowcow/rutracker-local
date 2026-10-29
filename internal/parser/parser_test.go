@@ -145,8 +145,7 @@ func TestParseFile_NonexistentPath(t *testing.T) {
 		t.Fatal("expected error opening missing file, got nil")
 	}
 	if _, ok := err.(*os.PathError); !ok {
-		// xml errors get wrapped; opening errors are *PathError under our %w wrap.
-		// Use errors.Is via os.IsNotExist for a robust check.
+		// The open error is wrapped with %w, so os.IsNotExist sees through it.
 		if !os.IsNotExist(err) {
 			t.Logf("err (not a PathError, not IsNotExist): %v", err)
 		}

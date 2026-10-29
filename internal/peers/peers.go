@@ -1,8 +1,5 @@
-// Package peers scrapes seeders/leechers for one rutracker topic. Counts are
-// visible only to a logged-in session (guests get no peer block; /scrape is 403,
-// no public API). Flow: hold a bb_session cookie, GET the topic, parse the block;
-// if the block is gone the cookie is dead → re-login (single-flight) and retry.
-// Every request is rate-limited to stay gentle on the account.
+// Package peers scrapes a topic's seeders and leechers, which only a logged-in
+// session sees; a page without them means the cookie died: log in, retry.
 package peers
 
 import (
@@ -29,10 +26,8 @@ const userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
 
 // Sentinel errors the endpoint maps to a UI state.
 var (
-	// ErrAnon — the page loaded but had no peer block: the cookie is invalid
-	// (we're seeing the anonymous view). Distinct from a real 0/0, which keeps
-	// the block. Every id we scrape is a torrent, so a missing block always
-	// means "not authorised", never "not a torrent".
+	// ErrAnon: the page has no peer block, the anonymous view of a dead cookie;
+	// every id scraped is a torrent, so a real 0/0 keeps the block.
 	ErrAnon = errors.New("peers: anonymous page (session invalid)")
 	// ErrAuth — login itself failed (bad credentials or a captcha wall).
 	ErrAuth = errors.New("peers: login failed")
@@ -127,7 +122,7 @@ func (c *Client) fetchOnce(ctx context.Context, topicID int64) (Stat, error) {
 	if err != nil {
 		return Stat{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return Stat{}, fmt.Errorf("%w: status %d", ErrUnavailable, resp.StatusCode)
 	}
@@ -140,9 +135,8 @@ func (c *Client) fetchOnce(ctx context.Context, topicID int64) (Stat, error) {
 	return parsePeers(body)
 }
 
-// Observed markup: <span class="seed">Сиды:&nbsp; <b>12</b></span> (same for
-// leech). The cyrillic label between ">" and "<b>" contains no "<", so a
-// lazy match up to the first <b> is safe. (?s) lets the block span newlines.
+// The markup is <span class="seed">Сиды:&nbsp; <b>12</b></span>; the label
+// holds no "<", so a lazy match to the first <b> is safe.
 var (
 	seedRe  = regexp.MustCompile(`(?s)<span class="seed">.*?<b>(\d+)</b>`)
 	leechRe = regexp.MustCompile(`(?s)<span class="leech">.*?<b>(\d+)</b>`)
@@ -176,9 +170,7 @@ func (c *Client) doLogin(ctx context.Context) (string, error) {
 	form := url.Values{}
 	form.Set("login_username", c.user)
 	form.Set("login_password", c.pass)
-	// The submit button field must be present for login.php to take the login
-	// branch; its value is "вход" in cp1251 (url.Values percent-encodes the
-	// raw bytes, which the server decodes back to cp1251).
+	// login.php needs the button field, "вход" in cp1251 (sent as raw bytes).
 	form.Set("login", "\xe2\xf5\xee\xe4")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
@@ -193,7 +185,7 @@ func (c *Client) doLogin(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	// Drain so the connection can be reused.
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
 

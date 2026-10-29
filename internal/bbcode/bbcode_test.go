@@ -137,9 +137,8 @@ func TestRender_NestedBoldInsideUrl(t *testing.T) {
 	}
 }
 
-// Bracketed tokens inside a URL must survive verbatim — the simple/strip
-// passes used to rewrite them inside the already-generated href
-// ([url]https://x.com/[b][/url] → href="https://x.com/<strong>").
+// Bracketed tokens inside a URL survive as they are: the later passes must
+// not rewrite them inside the href.
 func TestRender_BracketTokensInsideHrefSurvive(t *testing.T) {
 	got := Render(`[url]https://example.com/[b]path?x=[size=12][/url]`)
 	if !strings.Contains(got, `href="https://example.com/[b]path?x=[size=12]"`) {
@@ -149,9 +148,7 @@ func TestRender_BracketTokensInsideHrefSurvive(t *testing.T) {
 		t.Errorf("[b] inside inline URL expanded to formatting: %q", got)
 	}
 
-	// Named form (href can't contain "]" — the capture stops there, a
-	// pre-existing regex limit): href protected, link TEXT still gets
-	// inline tags.
+	// Named form: the href is protected, the link text still takes tags.
 	got = Render(`[url=https://example.com/dir][b]жирная ссылка[/b][/url]`)
 	if !strings.Contains(got, `href="https://example.com/dir"`) {
 		t.Errorf("named-form href was rewritten: %q", got)

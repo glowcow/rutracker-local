@@ -10,10 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ParserRun is the durable record of one parse invocation. Inserted at
-// start with `Status="running"`, completed (or marked failed) at finish.
-// The API reads the latest row into prometheus gauges so dashboards can
-// answer "when did the last full ingest finish, and what did it do".
+// ParserRun is one parse: inserted running, finished as succeeded or failed.
 type ParserRun struct {
 	ID           int64
 	StartedAt    time.Time
@@ -62,9 +59,7 @@ func FinishParserRun(ctx context.Context, pool *pgxpool.Pool, id, rowsInserted, 
 	return nil
 }
 
-// FailParserRun stamps the row with `failed`. Caller logs the underlying
-// error separately — we don't persist it (keeps the schema lean; logs are
-// the source of truth for diagnostics).
+// FailParserRun marks the run failed; the error itself goes to the log only.
 func FailParserRun(ctx context.Context, pool *pgxpool.Pool, id int64) error {
 	_, err := pool.Exec(ctx, `
 		UPDATE parser_runs
@@ -77,9 +72,8 @@ func FailParserRun(ctx context.Context, pool *pgxpool.Pool, id int64) error {
 	return nil
 }
 
-// LatestParserRun returns the most recent row by started_at. Used by the
-// API to populate the parser-side prometheus gauges. Returns ErrNotFound
-// when the table is empty (fresh deploy, no parse has run yet).
+// LatestParserRun returns the newest run, for the gauges; ErrNotFound before
+// the first parse.
 func LatestParserRun(ctx context.Context, pool *pgxpool.Pool) (ParserRun, error) {
 	var r ParserRun
 	err := pool.QueryRow(ctx, `
@@ -100,9 +94,8 @@ func LatestParserRun(ctx context.Context, pool *pgxpool.Pool) (ParserRun, error)
 	return r, nil
 }
 
-// LatestSucceededParserRun returns the most recent succeeded run — the API's
-// cache-version source. It keeps pointing at the last good sweep while a parse
-// runs or after a failure, so cached snapshots stay valid. ErrNotFound if none.
+// LatestSucceededParserRun returns the newest succeeded run, the API's cache
+// version, which a running or failed parse does not move.
 func LatestSucceededParserRun(ctx context.Context, pool *pgxpool.Pool) (ParserRun, error) {
 	var r ParserRun
 	err := pool.QueryRow(ctx, `
@@ -150,9 +143,8 @@ func CountParserRuns(ctx context.Context, pool *pgxpool.Pool) (ParserRunCounts, 
 	return c, nil
 }
 
-// RecentParserRuns returns the most recent runs by started_at, newest first.
-// Drives the admin panel's "recent loads" list. Empty result (no runs yet) is
-// not an error — it returns a nil slice.
+// RecentParserRuns returns the panel's recent runs, newest first; none is a
+// nil slice.
 func RecentParserRuns(ctx context.Context, pool *pgxpool.Pool, limit int) ([]ParserRun, error) {
 	if limit < 1 {
 		limit = 3
@@ -185,9 +177,8 @@ func RecentParserRuns(ctx context.Context, pool *pgxpool.Pool, limit int) ([]Par
 	return out, nil
 }
 
-// ReconcileRunningRuns marks left-over `running` rows `failed` at startup: a
-// single-replica parse can't survive a restart, so a `running` row at boot is
-// always an orphan (crash/OOM/deploy) that would otherwise hang status forever.
+// ReconcileRunningRuns fails the runs left running: with one replica such a
+// row at boot is always an orphan.
 func ReconcileRunningRuns(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
 	cmd, err := pool.Exec(ctx, `
 		UPDATE parser_runs

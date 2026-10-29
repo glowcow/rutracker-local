@@ -1,7 +1,5 @@
-// Package bbcode converts the rutracker BBCode body into safe HTML. Strategy:
-// HTML-escape first (raw <script>/<style> in old posts becomes inert text), then
-// regex passes swap BBCode for HTML. Order matters: drop [img] first, URL
-// whitelist before [url] expansion, presentational tags ([size]/[color]/…) last.
+// Package bbcode turns a description's BBCode into safe HTML: escape all, then
+// expand tags — images out first, URLs checked before [url], styles last.
 package bbcode
 
 import (
@@ -12,13 +10,10 @@ import (
 	"strings"
 )
 
-// Render returns HTML for the given BBCode input. Output is safe to drop
-// into a `dangerouslySetInnerHTML` / `template.HTML` sink — no raw HTML,
-// no javascript: URLs, no <img> tags.
+// Render returns HTML safe to inject as is: no raw HTML, no javascript: URLs,
+// no images.
 func Render(input string) string {
-	// NUL can't appear in valid XML 1.0 input, but strip it defensively:
-	// the protector below delimits placeholders with NUL and must never
-	// collide with attacker-controlled bytes.
+	// NUL delimits the placeholders below, so none may come from the input.
 	input = strings.ReplaceAll(input, "\x00", "")
 	s := html.EscapeString(input)
 
@@ -26,9 +21,8 @@ func Render(input string) string {
 		s = p.ReplaceAllString(s, "")
 	}
 
-	// URL expansion FIRST so the href whitelist runs on the original target.
-	// Generated hrefs hide behind placeholders — else later tag passes rewrite
-	// bracketed tokens inside them (a broken link with a dangling tag).
+	// URLs first, so the scheme check sees the original target; the links hide
+	// behind placeholders from the later passes.
 	var prot protector
 	s = urlWithText.ReplaceAllStringFunc(s, func(m string) string {
 		return expandURLWithText(m, &prot)
@@ -80,8 +74,6 @@ func (p *protector) restore(s string) string {
 	return s
 }
 
-// --- regex tables ------------------------------------------------------------
-
 // tagPattern pairs a compiled BBCode token matcher with its HTML replacement.
 type tagPattern struct {
 	re   *regexp.Regexp
@@ -89,11 +81,9 @@ type tagPattern struct {
 }
 
 var (
-	// [img]url[/img] and [img=...]url[/img]. We drop the whole thing because
-	// the design decision is "no outbound HTTP, no broken thumbnails" (most
-	// rutracker dumps are 2010-era — fastpic/imageshack/radikal hosts dead).
+	// Images go: no outbound requests, and the 2010-era image hosts are dead.
 	imgPaired = regexp.MustCompile(`(?is)\[img(?:=[^\]]*)?\].*?\[/img\]`)
-	// Some posts use a malformed self-contained form, e.g. [img=https://x/y.jpg]
+	// A malformed self-closed form: [img=https://x/y.jpg].
 	imgSelfClose = regexp.MustCompile(`(?is)\[img=[^\]]*\]`)
 
 	dropPatterns = []*regexp.Regexp{imgPaired, imgSelfClose}
@@ -156,8 +146,6 @@ var (
 	}
 )
 
-// --- helpers -----------------------------------------------------------------
-
 func expandURLWithText(match string, prot *protector) string {
 	m := urlWithText.FindStringSubmatch(match)
 	if len(m) != 3 {
@@ -202,9 +190,7 @@ func expandList(match string) string {
 	if len(m) != 2 {
 		return match
 	}
-	// Split on [*] markers directly — newlines haven't been converted to
-	// <br> yet at this point in Render, so we can't rely on them as
-	// separators.
+	// Split on [*]: newlines are not <br> yet at this point.
 	parts := listItemSplit.Split(m[1], -1)
 	var b strings.Builder
 	b.WriteString("<ul>")

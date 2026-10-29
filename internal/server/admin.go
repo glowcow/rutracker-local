@@ -21,14 +21,11 @@ import (
 	"github.com/glowcow/rutracker-local/internal/store"
 )
 
-// parseStreamPath is the SSE endpoint. Named so the middleware chain can exempt
-// it from the /api/* request-deadline and gzip buffering (a long-lived stream
-// must not be capped at 10 s or buffered by the gzip writer).
+// parseStreamPath is the event stream, which apiTimeout and gzip leave alone.
 const parseStreamPath = "/api/admin/parse/stream"
 
-// requireAdmin gates a handler behind the shared-secret bearer token. Empty
-// configured token → 503 (fail-closed). Used only on the mutating endpoint
-// (POST /api/admin/parse); read endpoints stay open (LAN-only).
+// requireAdmin checks the bearer token; without one configured it answers
+// 503. Only starting a parse needs it.
 func requireAdmin(token string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if token == "" {
@@ -62,9 +59,8 @@ func isDumpName(n string) bool {
 		strings.HasSuffix(n, ".xml.gz")
 }
 
-// dumpsHandler lists dump files in the mount for the panel's picker. A missing
-// or unreadable dir is not an error — it returns an empty list so the panel
-// shows "no dumps" (e.g. local dev without the mount).
+// dumpsHandler lists the dumps for the panel; a missing directory is an empty
+// list, as in local development.
 func dumpsHandler(dumpDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		entries, err := os.ReadDir(dumpDir)
@@ -147,9 +143,8 @@ func parseRunsHandler(pool *pgxpool.Pool) http.HandlerFunc {
 	}
 }
 
-// parseStatusHandler → current run state. `running` is the in-process
-// single-flight flag (authoritative for this process); `run` is the latest
-// parser_runs row (may be in-flight or the last completed one). Open read.
+// parseStatusHandler reports this process's single-flight flag and the latest
+// parser_runs row.
 func parseStatusHandler(pool *pgxpool.Pool, ctrl *parseController) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		resp := map[string]any{"running": ctrl.isRunning(), "run": nil}
@@ -163,10 +158,8 @@ func parseStatusHandler(pool *pgxpool.Pool, ctrl *parseController) http.HandlerF
 	}
 }
 
-// parseStreamHandler streams the current run's events over SSE. On connect it
-// replays the hub's buffered log (full run so far), then streams live with a
-// periodic heartbeat. Open read. Relies on being exempt from apiTimeout/gzip
-// (see server.Run) and clears the per-connection write deadline itself.
+// parseStreamHandler replays the run's events so far, then streams them live
+// with a heartbeat and no write deadline.
 func parseStreamHandler(ctrl *parseController) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -230,10 +223,8 @@ type startReq struct {
 	Workers   int    `json:"workers"`
 }
 
-// parseStartHandler kicks off a parse. Gated by requireAdmin. Single-flight →
-// 409 if one is already running; otherwise 202 (the parse runs in the
-// background, observed via /status and /stream). The dump name is constrained
-// to dumpDir via filepath.Base so a request can't point the parser elsewhere.
+// parseStartHandler starts a parse in the background: 202, or 409 when one
+// runs; filepath.Base keeps the dump inside dumpDir.
 func parseStartHandler(ctrl *parseController, dumpDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req startReq

@@ -1,3 +1,4 @@
+// Package db connects to Postgres and applies the embedded migrations.
 package db
 
 import (
@@ -20,7 +21,6 @@ func Connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse pg url: %w", err)
 	}
-	// Defaults are fine for homelab single-user; tune via env vars later if needed.
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("pgx pool: %w", err)
@@ -32,27 +32,23 @@ func Connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-// migrateLockID keys the cross-process advisory lock serialising MigrateUp.
-// Arbitrary but stable — must never collide with another advisory-lock user
-// on the same database (we have none).
+// migrateLockID keys MigrateUp's advisory lock; nothing else here takes one.
 const migrateLockID int64 = 0x72747261636b6572 // "rtracker"
 
-// MigrateUp applies pending goose migrations from the embedded FS, serialised
-// via a pg advisory lock (goose's UpContext doesn't lock, so two booting replicas
-// would race the same DDL and one crash-loops on "already exists"). The lock is
-// session-scoped on one dedicated conn; deferred Close releases it even on error.
+// MigrateUp applies the embedded migrations under an advisory lock, as goose
+// takes none and two starts would race the DDL.
 func MigrateUp(ctx context.Context, url string) error {
 	db, err := sql.Open("pgx", url)
 	if err != nil {
 		return fmt.Errorf("open sql: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	lockConn, err := db.Conn(ctx)
 	if err != nil {
 		return fmt.Errorf("migrate lock conn: %w", err)
 	}
-	defer lockConn.Close()
+	defer func() { _ = lockConn.Close() }()
 	if _, err := lockConn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, migrateLockID); err != nil {
 		return fmt.Errorf("acquire migrate lock: %w", err)
 	}

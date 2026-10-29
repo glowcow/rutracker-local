@@ -1,7 +1,5 @@
-// Package filelist encodes a torrent's file listing for storage in
-// torrent_files.files: a compact JSON array of [path, size] pairs, deflated.
-// JSON is what the API hands to the browser, so the stored bytes decompress
-// straight into the response with no re-marshalling.
+// Package filelist stores a torrent's files as a deflated JSON array of
+// [path, size], the JSON the API sends, so it inflates straight into replies.
 package filelist
 
 import (
@@ -20,9 +18,8 @@ type File struct {
 	Size int64
 }
 
-// MaxDecompressed caps how much a blob may inflate to. A torrent with 33k
-// files (the dump's worst case) lands near 2.5 MB, so 64 MB is far above any
-// legitimate listing while still bounding a corrupt or hostile row.
+// MaxDecompressed bounds a blob's inflated size: the largest listing, 33k
+// files, is about 2.5 MB.
 const MaxDecompressed = 64 << 20
 
 // Encode renders files as JSON and deflates the result.
@@ -65,7 +62,7 @@ func EncodeJSON(files []File) []byte {
 // embeds verbatim in its response.
 func DecodeJSON(blob []byte) ([]byte, error) {
 	zr := flate.NewReader(bytes.NewReader(blob))
-	defer zr.Close()
+	defer func() { _ = zr.Close() }()
 	out, err := io.ReadAll(io.LimitReader(zr, MaxDecompressed+1))
 	if err != nil {
 		return nil, fmt.Errorf("decompress file list: %w", err)
@@ -76,9 +73,8 @@ func DecodeJSON(blob []byte) ([]byte, error) {
 	return out, nil
 }
 
-// Decode inflates and parses a blob. Only callers that must rewrite the
-// listing (truncating an oversized one) pay this cost — the plain read path
-// uses DecodeJSON.
+// Decode inflates and parses a blob, for a listing that must be cut; reads
+// use DecodeJSON.
 func Decode(blob []byte) ([]File, error) {
 	raw, err := DecodeJSON(blob)
 	if err != nil {
@@ -107,10 +103,8 @@ func Decode(blob []byte) ([]File, error) {
 
 const hexDigits = "0123456789abcdef"
 
-// appendJSONString writes s as a JSON string literal. Valid UTF-8 above the
-// control range passes through unescaped (the dump is full of Cyrillic —
-// \u-escaping it would inflate every name); invalid bytes become U+FFFD so the
-// output is always parseable JSON.
+// appendJSONString writes s as JSON, Cyrillic unescaped to keep it small and
+// invalid bytes as U+FFFD to keep it valid.
 func appendJSONString(buf []byte, s string) []byte {
 	buf = append(buf, '"')
 	for i := 0; i < len(s); {

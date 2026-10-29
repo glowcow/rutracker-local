@@ -14,10 +14,8 @@ import (
 	"github.com/glowcow/rutracker-local/internal/store"
 )
 
-// HTTP-side metrics: registered at init, updated per request by the `metrics`
-// middleware, served at /metrics. Labels are bounded to keep cardinality low:
-// method folds unknown verbs to "other" (Go accepts arbitrary methods); route
-// is a normalizeRoute string, never the raw URL; status_class is "Nxx".
+// Request metrics; labels stay bounded: unknown methods fold to "other", the
+// route is normalizeRoute's, the status a class.
 var (
 	httpRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "rutracker_http_requests_total",
@@ -51,9 +49,8 @@ var (
 		Help: "Sum of size_bytes across all torrents.",
 	})
 
-	// Bloat-tracking gauges. We don't run postgres_exporter — these are the
-	// minimum we need to spot autovacuum falling behind without standing
-	// up another sidecar. Ratio is computed in PromQL on the dashboard.
+	// Enough to see autovacuum fall behind without postgres_exporter; the
+	// dashboard computes the ratio.
 	torrentsLiveTuples = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "rutracker_torrents_live_tuples",
 		Help: "n_live_tup from pg_stat_user_tables for the torrents table.",
@@ -70,9 +67,8 @@ var (
 	})
 )
 
-// Parser-run gauges + counter, refreshed from parser_runs on the same cadence.
-// Gauges = snapshot of the latest run; runs_total is set from the table each
-// refresh (not incremented — the parser writes the row, the API never sees it).
+// The latest run's gauges and the runs per status, read from parser_runs on
+// the same cadence; the API never sees a run happen.
 var (
 	parserLastStart = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "rutracker_parser_last_run_started_timestamp_seconds",
@@ -99,9 +95,7 @@ var (
 		Help: "Rows deleted by mark-and-sweep on the most recent parser run.",
 	})
 
-	// status label is the run's terminal state; a still-running entry is
-	// reflected by parserLastFinish=0 (the gauges above) so the dashboard
-	// can show "in progress" cleanly without a 4th status bucket here.
+	// A run in progress shows as parserLastFinish 0, not as a status here.
 	parserRunsTotal = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "rutracker_parser_runs_total",
 		Help: "Lifetime number of parser_runs rows by status.",
@@ -155,10 +149,8 @@ func normalizeMethod(m string) string {
 	}
 }
 
-// metrics wraps next with counter + histogram updates. Status code is
-// captured via the same statusRecorder accessLog uses; both middlewares
-// run in series (accessLog → metrics → handler) so each gets to inspect
-// the response.
+// metrics counts and times every request, reading the status through the
+// same statusRecorder as accessLog.
 func metrics(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -185,9 +177,8 @@ func classifyStatus(code int) string {
 	}
 }
 
-// startMetricsRefresher pulls the content + parser gauges from postgres every
-// `interval` in a background goroutine. Errors log at WARN (metrics are
-// best-effort). First refresh runs immediately so gauges aren't zero until tick 1.
+// startMetricsRefresher reads the gauges from Postgres at once and then every
+// interval; an error is logged, the metrics are best effort.
 func startMetricsRefresher(ctx context.Context, pool *pgxpool.Pool, interval time.Duration) {
 	statsCache := &versionedCache[store.Stats]{}
 	go func() {
@@ -211,9 +202,8 @@ func refreshMetrics(ctx context.Context, pool *pgxpool.Pool, statsCache *version
 	qctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	// Content stats are a full aggregate scan, so gate them on the latest
-	// succeeded run (same rule as the API cache) — else every tick seq-scans
-	// torrents, evicting the buffer cache search relies on.
+	// The content stats scan the whole table, so only a new succeeded run
+	// recomputes them, or every tick would evict search's cache.
 	version := latestParserVersion(qctx, pool)
 	if stats, ok := statsCache.get(version); ok {
 		setContentGauges(stats)

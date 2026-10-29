@@ -19,10 +19,8 @@ import (
 	"github.com/glowcow/rutracker-local/internal/transmission"
 )
 
-// newTransmissionClient builds the RPC client, or nil when no endpoint is
-// configured (feature off → the button is hidden and the route 503s). The Host
-// header defaults to the RPC URL's hostname (port stripped) so a plain
-// RT_TRANSMISSION_RPC_URL already satisfies the daemon's rpc-host-whitelist.
+// newTransmissionClient returns nil without an RPC URL; the Host header
+// defaults to the URL's host, which rpc-host-whitelist accepts.
 func newTransmissionClient(cfg config.Config) *transmission.Client {
 	if cfg.TransmissionRPCURL == "" {
 		return nil
@@ -37,9 +35,8 @@ func newTransmissionClient(cfg config.Config) *transmission.Client {
 		cfg.TransmissionUser, cfg.TransmissionPass)
 }
 
-// transmissionStatusResponse tells the drawer whether to render the button
-// (configured) and whether it's live (online). A dead endpoint greys it out
-// instead of letting a click fail.
+// transmissionStatusResponse says whether the button shows and whether the
+// daemon answers; a dead one greys it out.
 type transmissionStatusResponse struct {
 	Configured bool `json:"configured"`
 	Online     bool `json:"online"`
@@ -87,9 +84,8 @@ type downloadResponse struct {
 
 var hashRe = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
-// downloadHandler pushes a torrent's magnet into Transmission. The magnet is
-// built server-side from the stored info-hash (never trusting client input);
-// an unclean hash 404s just like the drawer hides the action for one.
+// downloadHandler sends the magnet built from the stored hash, never from the
+// client; a malformed hash is a 404.
 func downloadHandler(pool *pgxpool.Pool, tc *transmission.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if tc == nil {
@@ -131,10 +127,8 @@ func downloadHandler(pool *pgxpool.Pool, tc *transmission.Client) http.HandlerFu
 	}
 }
 
-// trackers baked into every magnet — mirror of web/DetailDrawer TRACKERS.
-// bt[1-4].t-ru.org are rutracker's own; the udp:// ones are open-trackers kept
-// as a fallback. opentrackr/openbittorrent were dropped — unreachable from the
-// daemon ("Could not connect to tracker" on every scrape).
+// trackers go into every magnet, as the drawer's TRACKERS: RuTracker's own
+// and open ones the daemon reaches.
 var trackers = []string{
 	"http://bt.t-ru.org/ann?magnet",
 	"http://bt2.t-ru.org/ann?magnet",

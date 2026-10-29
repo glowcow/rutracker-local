@@ -51,9 +51,7 @@ func GetPeers(ctx context.Context, pool *pgxpool.Pool, torrentID int64) (Peers, 
 	return p, true, nil
 }
 
-// CountCachedPeers returns how many torrents have a cached peer snapshot.
-// Cheap (small table); computed fresh per request so the dashboard number
-// grows as browsing populates the cache.
+// CountCachedPeers counts the torrents with cached peers, fresh per request.
 func CountCachedPeers(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
 	var n int64
 	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM torrent_peers`).Scan(&n); err != nil {

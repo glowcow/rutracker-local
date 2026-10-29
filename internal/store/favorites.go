@@ -10,18 +10,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// FavoriteItem is the public shape of a favorited torrent. It piggy-backs on
-// Torrent for the card fields the UI already renders, and adds AddedAt so the
-// favorites view can sort "newest first" without a separate fetch.
+// FavoriteItem is a favourite: the card's Torrent and when it was added.
 type FavoriteItem struct {
 	Torrent
 	AddedAt time.Time `json:"added_at"`
 }
 
-// ListFavorites returns every favorited torrent joined with its current row
-// in `torrents`. CASCADE on the favorites FK guarantees swept torrents
-// don't show up here as dangling rows. Ordered by added_at DESC so the UI
-// can render directly without an extra sort.
+// ListFavorites returns the favourites newest first; the FK's cascade drops
+// the swept ones.
 func ListFavorites(ctx context.Context, pool *pgxpool.Pool) ([]FavoriteItem, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT t.id, t.title, t.forum_id, t.forum_name,
@@ -57,9 +53,8 @@ func ListFavorites(ctx context.Context, pool *pgxpool.Pool) ([]FavoriteItem, err
 	return out, nil
 }
 
-// AddFavorite is idempotent — a re-star of an already-starred id is a no-op.
-// Returns ErrNotFound when the torrent id doesn't exist; the FK violation
-// from postgres is the round trip we'd otherwise spend on a precheck SELECT.
+// AddFavorite is idempotent; ErrNotFound for an unknown id, read from the FK
+// violation instead of a SELECT first.
 func AddFavorite(ctx context.Context, pool *pgxpool.Pool, id int64) error {
 	_, err := pool.Exec(ctx, `
 		INSERT INTO favorites (torrent_id) VALUES ($1)

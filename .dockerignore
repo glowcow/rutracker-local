@@ -1,26 +1,3 @@
-.git
-.gitignore
-.gitlab-ci.yml
-.gitlab/
-.dockerignore
-Dockerfile
-README.md
-
-# CI caches inside the project directory.
-.gocache/
-.gomodcache/
-.npm/
-
-.idea/
-.vscode/
-.DS_Store
-
-# Patterns are anchored to the context root, so web/ needs its own entries.
-node_modules/
-web/node_modules/
-
-# web/dist is rebuilt in the image; a stale local bundle would be embedded too.
-bin/
-dist/
-web/dist/
-.data/
+# The image takes the built binary only.
+*
+!bin/app
