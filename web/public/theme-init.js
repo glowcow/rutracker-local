@@ -9,7 +9,7 @@
     dark =
       stored === "dark" ||
       (stored !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  } catch (e) {
+  } catch {
     // No storage: the classic light default stands until useTheme takes over.
   }
   var root = document.documentElement;

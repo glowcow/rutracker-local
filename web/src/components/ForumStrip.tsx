@@ -8,16 +8,16 @@ import { useLang } from "../lib/i18n";
 import { Collapse } from "./Collapse";
 import { Tooltip } from "./Tooltip";
 
-function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  return String(n);
+function formatCount(count: number): string {
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
+  return String(count);
 }
 
 function splitPath(name: string): string[] {
   return name
     .split(" - ")
-    .map((s) => s.trim())
+    .map((part) => part.trim())
     .filter(Boolean);
 }
 
@@ -48,8 +48,8 @@ const ALPHA = new Intl.Collator(["ru", "en"], { numeric: true });
 // names per top, then bucket each forum. Deeper levels fold into the leaf.
 function buildGroups(forums: Forum[]): Group[] {
   const knownMids = new Map<string, Set<string>>();
-  for (const f of forums) {
-    const parts = splitPath(f.name);
+  for (const forum of forums) {
+    const parts = splitPath(forum.name);
     if (parts.length < 3) continue;
     const top = parts[0];
     let set = knownMids.get(top);
@@ -61,9 +61,9 @@ function buildGroups(forums: Forum[]): Group[] {
   }
 
   const tops = new Map<string, Map<string, LeafForum[]>>();
-  for (const f of forums) {
-    const parts = splitPath(f.name);
-    const top = parts[0] || f.name;
+  for (const forum of forums) {
+    const parts = splitPath(forum.name);
+    const top = parts[0] || forum.name;
 
     let mid: string;
     let leafLabel: string;
@@ -99,33 +99,33 @@ function buildGroups(forums: Forum[]): Group[] {
       arr = [];
       midMap.set(mid, arr);
     }
-    arr.push({ forum: f, leafLabel, isUmbrella });
+    arr.push({ forum: forum, leafLabel, isUmbrella });
   }
 
   return Array.from(tops.entries())
     .map(([top, midMap]) => {
       const mids: Mid[] = Array.from(midMap.entries()).map(([midName, leaves]) => ({
         midName,
-        totalCount: leaves.reduce((s, l) => s + l.forum.count, 0),
-        leaves: leaves.sort((a, b) => {
+        totalCount: leaves.reduce((sum, leaf) => sum + leaf.forum.count, 0),
+        leaves: leaves.sort((left, right) => {
           // "Общий" pinned first within its mid.
-          if (a.isUmbrella !== b.isUmbrella) return a.isUmbrella ? -1 : 1;
-          return ALPHA.compare(a.leafLabel, b.leafLabel);
+          if (left.isUmbrella !== right.isUmbrella) return left.isUmbrella ? -1 : 1;
+          return ALPHA.compare(left.leafLabel, right.leafLabel);
         }),
       }));
-      mids.sort((a, b) => {
+      mids.sort((left, right) => {
         // Empty-mid first (truly direct sub-forums), then alphabetically.
-        if (a.midName === "" && b.midName !== "") return -1;
-        if (a.midName !== "" && b.midName === "") return 1;
-        return ALPHA.compare(a.midName, b.midName);
+        if (left.midName === "" && right.midName !== "") return -1;
+        if (left.midName !== "" && right.midName === "") return 1;
+        return ALPHA.compare(left.midName, right.midName);
       });
       return {
         top,
-        totalCount: mids.reduce((s, m) => s + m.totalCount, 0),
+        totalCount: mids.reduce((sum, mid) => sum + mid.totalCount, 0),
         mids,
       };
     })
-    .sort((a, b) => ALPHA.compare(a.top, b.top));
+    .sort((left, right) => ALPHA.compare(left.top, right.top));
 }
 
 type Props = {
@@ -161,8 +161,8 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
 
   // Noun matching formatCount's display: abbreviated K/M phrases take the
   // genitive plural (pAbbr), exact sub-1000 counts use real plural rules.
-  const nounFor = (key: "torrents" | "forums", n: number) =>
-    n >= 1000 ? pAbbr(key) : p(key, n);
+  const nounFor = (key: "torrents" | "forums", count: number) =>
+    count >= 1000 ? pAbbr(key) : p(key, count);
 
   // Forums and stats do not change while the tab is open: cached for good.
   const { data: forumsData, isLoading } = useQuery({
@@ -186,7 +186,7 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
   // The group whose mid-list is rendered. Because expandedTop is kept on
   // close, this stays set during the collapse animation.
   const displayGroup = expandedTop
-    ? groups.find((g) => g.top === expandedTop)
+    ? groups.find((group) => group.top === expandedTop)
     : undefined;
   const midsOpen = topOpen && displayGroup !== undefined;
 
@@ -337,13 +337,13 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
               <span className="swiss-skeleton h-4 w-24" />
             </>
           )}
-          {groups.map((g) => (
+          {groups.map((group) => (
             <TopChip
-              key={g.top}
-              label={g.top}
-              count={g.totalCount}
-              expanded={topOpen && expandedTop === g.top}
-              onClick={() => toggleTop(g.top)}
+              key={group.top}
+              label={group.top}
+              count={group.totalCount}
+              expanded={topOpen && expandedTop === group.top}
+              onClick={() => toggleTop(group.top)}
             />
           ))}
         </div>
@@ -387,15 +387,15 @@ export const ForumStrip = memo(function ForumStrip({ selectedForumId, onSelectFo
                   open={expanded}
                   className={cn("flex flex-wrap gap-x-4 gap-y-1.5", !isDirect && "pl-4")}
                 >
-                      {mid.leaves.map((l) => (
+                      {mid.leaves.map((leaf) => (
                         <SubChip
-                          key={l.forum.id}
-                          forum={l.forum}
-                          leafLabel={l.isUmbrella ? t.forumsUmbrella : l.leafLabel}
-                          active={l.forum.id === selectedForumId}
+                          key={leaf.forum.id}
+                          forum={leaf.forum}
+                          leafLabel={leaf.isUmbrella ? t.forumsUmbrella : leaf.leafLabel}
+                          active={leaf.forum.id === selectedForumId}
                           onClick={() =>
                             onSelectForum(
-                              l.forum.id === selectedForumId ? undefined : l.forum.id,
+                              leaf.forum.id === selectedForumId ? undefined : leaf.forum.id,
                             )
                           }
                         />

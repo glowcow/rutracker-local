@@ -68,7 +68,7 @@ func TestLoadDefaults(t *testing.T) {
 // The peers are off unless RT_PEERS_ENABLED says true; a bad value of any
 // peers setting keeps them off with a warning and the app starting.
 func TestLoadPeersEnabled(t *testing.T) {
-	for _, c := range []struct {
+	for _, testCase := range []struct {
 		env  map[string]string
 		want bool
 		warn string
@@ -81,14 +81,14 @@ func TestLoadPeersEnabled(t *testing.T) {
 		{map[string]string{"RT_PEERS_ENABLED": "true", "RT_PEERS_TTL": "24"}, false, "RT_PEERS_TTL"},
 		{map[string]string{"RT_PEERS_ENABLED": "true", "RT_PEERS_MIN_INTERVAL": "-1s"}, false, "RT_PEERS_MIN_INTERVAL"},
 	} {
-		c.env["RT_DATABASE_URL"] = "postgres://u:p@h:5432/d"
-		cfg, err := LoadFrom(env(c.env))
+		testCase.env["RT_DATABASE_URL"] = "postgres://u:p@h:5432/d"
+		cfg, err := LoadFrom(env(testCase.env))
 		if err != nil {
-			t.Fatalf("%v: %v", c.env, err)
+			t.Fatalf("%v: %v", testCase.env, err)
 		}
-		if cfg.PeersEnabled != c.want || (c.warn == "") != (len(cfg.Warnings) == 0) ||
-			(c.warn != "" && !strings.Contains(cfg.Warnings[0].Error(), c.warn)) {
-			t.Errorf("%v: enabled %v, warnings %v; want %v, %q", c.env, cfg.PeersEnabled, cfg.Warnings, c.want, c.warn)
+		if cfg.PeersEnabled != testCase.want || (testCase.warn == "") != (len(cfg.Warnings) == 0) ||
+			(testCase.warn != "" && !strings.Contains(cfg.Warnings[0].Error(), testCase.warn)) {
+			t.Errorf("%v: enabled %v, warnings %v; want %v, %q", testCase.env, cfg.PeersEnabled, cfg.Warnings, testCase.want, testCase.warn)
 		}
 	}
 	cfg, _ := LoadFrom(env(map[string]string{"RT_DATABASE_URL": "postgres://u:p@h:5432/d", "RT_PEERS_TTL": "bad"}))

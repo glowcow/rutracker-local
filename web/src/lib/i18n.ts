@@ -199,7 +199,7 @@ const ru: Dict = {
   drawerFiles: "Файлы",
   drawerFilesLoading: "Загружается список файлов…",
   drawerFilesError: "Не удалось загрузить список файлов",
-  drawerFilesTruncated: (n) => `показана первая 1000, ещё ${n}`,
+  drawerFilesTruncated: (count) => `показана первая 1000, ещё ${count}`,
   drawerFilesNone: "Дамп не содержит списка файлов для этой раздачи",
 
   forumsDirect: "Прямые форумы",
@@ -334,7 +334,7 @@ const en: Dict = {
   drawerFiles: "Files",
   drawerFilesLoading: "Loading file list…",
   drawerFilesError: "Could not load the file list",
-  drawerFilesTruncated: (n) => `first 1000 shown, ${n} more`,
+  drawerFilesTruncated: (count) => `first 1000 shown, ${count} more`,
   drawerFilesNone: "The dump carries no file list for this torrent",
 
   forumsDirect: "Direct forums",
@@ -466,7 +466,7 @@ export function detectInitialLang(): Lang {
 }
 
 export function useLang(): Ctx {
-  const v = useContext(LangCtx);
-  if (!v) throw new Error("useLang must be used inside <LangProvider>");
-  return v;
+  const ctx = useContext(LangCtx);
+  if (!ctx) throw new Error("useLang must be used inside <LangProvider>");
+  return ctx;
 }

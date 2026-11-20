@@ -28,11 +28,11 @@ function buildTree(files: [string, number][]): Node[] {
     let dir = root;
     dir.size += size;
     dir.count += 1;
-    for (let i = 0; i < parts.length - 1; i++) {
-      let next = dir.dirs.get(parts[i]);
+    for (let index = 0; index < parts.length - 1; index++) {
+      let next = dir.dirs.get(parts[index]);
       if (!next) {
         next = { size: 0, count: 0, dirs: new Map(), files: [] };
-        dir.dirs.set(parts[i], next);
+        dir.dirs.set(parts[index], next);
       }
       next.size += size;
       next.count += 1;
@@ -46,19 +46,19 @@ function buildTree(files: [string, number][]): Node[] {
 // Directories first, then files, each by name: the dump's own order is lost
 // in parsing, and a predictable one beats a half-kept one.
 function toNodes(dir: Dir, prefix: string): Node[] {
-  const byName = (a: { name: string }, b: { name: string }) =>
-    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+  const byName = (left: { name: string }, right: { name: string }) =>
+    left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" });
   const dirs: Node[] = [...dir.dirs.entries()]
-    .map(([name, d]) => ({
+    .map(([name, dir]) => ({
       name,
       path: prefix + name + "/",
-      size: d.size,
-      count: d.count,
-      children: toNodes(d, prefix + name + "/"),
+      size: dir.size,
+      count: dir.count,
+      children: toNodes(dir, prefix + name + "/"),
     }))
     .sort(byName);
   const files: Node[] = dir.files
-    .map((f) => ({ name: f.name, path: prefix + f.name, size: f.size, count: 1 }))
+    .map((file) => ({ name: file.name, path: prefix + file.name, size: file.size, count: 1 }))
     .sort(byName);
   return [...dirs, ...files];
 }
@@ -73,10 +73,10 @@ export function FileTree({ files }: { files: [string, number][] }) {
     if (files.length <= AUTO_EXPAND_LIMIT) return new Set();
     const shut = new Set<string>();
     const walk = (ns: Node[], depth: number) => {
-      for (const n of ns) {
-        if (!n.children) continue;
-        if (depth > 0) shut.add(n.path);
-        walk(n.children, depth + 1);
+      for (const node of ns) {
+        if (!node.children) continue;
+        if (depth > 0) shut.add(node.path);
+        walk(node.children, depth + 1);
       }
     };
     walk(nodes, 0);
@@ -112,13 +112,13 @@ function Level({
 }) {
   return (
     <ul>
-      {nodes.map((n) =>
-        n.children ? (
-          <li key={n.path}>
+      {nodes.map((node) =>
+        node.children ? (
+          <li key={node.path}>
             <button
               type="button"
-              onClick={() => onToggle(n.path)}
-              aria-expanded={!collapsed.has(n.path)}
+              onClick={() => onToggle(node.path)}
+              aria-expanded={!collapsed.has(node.path)}
               className={cn(
                 "w-full flex items-center gap-1.5 py-1 text-left rounded-sm",
                 "hover:text-[var(--color-accent)] transition-colors cursor-pointer"
@@ -128,27 +128,27 @@ function Level({
               <ChevronRight
                 className={cn(
                   "size-3 shrink-0 transition-transform",
-                  !collapsed.has(n.path) && "rotate-90"
+                  !collapsed.has(node.path) && "rotate-90"
                 )}
               />
-              {collapsed.has(n.path) ? (
+              {collapsed.has(node.path) ? (
                 <Folder className="size-3.5 shrink-0 text-[var(--color-ink-muted)]" />
               ) : (
                 <FolderOpen className="size-3.5 shrink-0 text-[var(--color-ink-muted)]" />
               )}
-              <span className="min-w-0 truncate text-[12.5px] font-medium">{n.name}</span>
+              <span className="min-w-0 truncate text-[12.5px] font-medium">{node.name}</span>
               <span className="ml-auto pl-3 shrink-0 flex items-baseline gap-2 text-[11px] tabular-nums text-[var(--color-ink-muted)]">
-                <span>{n.count}</span>
-                <span>{formatBytes(n.size)}</span>
+                <span>{node.count}</span>
+                <span>{formatBytes(node.size)}</span>
               </span>
             </button>
-            {!collapsed.has(n.path) && (
-              <Level nodes={n.children} depth={depth + 1} collapsed={collapsed} onToggle={onToggle} />
+            {!collapsed.has(node.path) && (
+              <Level nodes={node.children} depth={depth + 1} collapsed={collapsed} onToggle={onToggle} />
             )}
           </li>
         ) : (
           <li
-            key={n.path}
+            key={node.path}
             className="flex items-center gap-1.5 py-1"
             // The chevron's width, so files line up with the folder names
             // above them instead of with their chevrons.
@@ -156,10 +156,10 @@ function Level({
           >
             <FileIcon className="size-3.5 shrink-0 text-[var(--color-rule)]" />
             <span className="min-w-0 truncate text-[12.5px] text-[var(--color-ink-soft)]">
-              {n.name}
+              {node.name}
             </span>
             <span className="ml-auto pl-3 shrink-0 text-[11px] tabular-nums text-[var(--color-ink-muted)]">
-              {formatBytes(n.size)}
+              {formatBytes(node.size)}
             </span>
           </li>
         )

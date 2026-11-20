@@ -50,11 +50,11 @@ func ingest(t *testing.T, ctx context.Context, pool *pgxpool.Pool, batch []store
 		t.Fatalf("new copy ingester: %v", err)
 	}
 	defer ing.Close()
-	n, err := ing.Ingest(ctx, batch)
+	count, err := ing.Ingest(ctx, batch)
 	if err != nil {
 		t.Fatalf("ingest: %v", err)
 	}
-	return n
+	return count
 }
 
 func sampleTorrents() []store.Torrent {
@@ -176,9 +176,9 @@ func TestGet_NotFound(t *testing.T) {
 func TestIngest_InsertThenUpdate(t *testing.T) {
 	ctx, pool := testPool(t)
 
-	n := ingest(t, ctx, pool, sampleTorrents())
-	if n != 3 {
-		t.Fatalf("inserted %d, want 3", n)
+	count := ingest(t, ctx, pool, sampleTorrents())
+	if count != 3 {
+		t.Fatalf("inserted %d, want 3", count)
 	}
 
 	total, err := store.Count(ctx, pool)
@@ -282,19 +282,19 @@ func TestSweep_NothingToDelete(t *testing.T) {
 func TestGetStats(t *testing.T) {
 	ctx, pool := testPool(t)
 	ingest(t, ctx, pool, sampleTorrents())
-	s, err := store.GetStats(ctx, pool)
+	stats, err := store.GetStats(ctx, pool)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.TorrentsTotal != 3 {
-		t.Errorf("TorrentsTotal = %d, want 3", s.TorrentsTotal)
+	if stats.TorrentsTotal != 3 {
+		t.Errorf("TorrentsTotal = %d, want 3", stats.TorrentsTotal)
 	}
 	wantSize := int64(909_382_926 + 4_287_419_002 + 68_412_876_543)
-	if s.TotalSizeBytes != wantSize {
-		t.Errorf("TotalSizeBytes = %d, want %d", s.TotalSizeBytes, wantSize)
+	if stats.TotalSizeBytes != wantSize {
+		t.Errorf("TotalSizeBytes = %d, want %d", stats.TotalSizeBytes, wantSize)
 	}
-	if s.ForumsCount != 3 {
-		t.Errorf("ForumsCount = %d, want 3", s.ForumsCount)
+	if stats.ForumsCount != 3 {
+		t.Errorf("ForumsCount = %d, want 3", stats.ForumsCount)
 	}
 }
 
@@ -308,9 +308,9 @@ func TestListForums(t *testing.T) {
 	if len(forums) != 3 {
 		t.Fatalf("forums len = %d, want 3", len(forums))
 	}
-	for _, f := range forums {
-		if f.Count != 1 {
-			t.Errorf("forum %d count = %d, want 1", f.ID, f.Count)
+	for _, forum := range forums {
+		if forum.Count != 1 {
+			t.Errorf("forum %d count = %d, want 1", forum.ID, forum.Count)
 		}
 	}
 }

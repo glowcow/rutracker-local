@@ -34,10 +34,10 @@ export function useParseStream(open: boolean) {
       setProgress(null);
       logId.current = 0;
     };
-    es.onmessage = (e) => {
+    es.onmessage = (event) => {
       let ev: SSEvent;
       try {
-        ev = JSON.parse(e.data);
+        ev = JSON.parse(event.data);
       } catch {
         return;
       }
@@ -70,9 +70,9 @@ export function useParseStream(open: boolean) {
     }
     let cancelled = false;
     getStatus()
-      .then((s) => {
+      .then((status) => {
         if (cancelled) return;
-        if (s.running) {
+        if (status.running) {
           setStatus("running");
           connect();
         } else {

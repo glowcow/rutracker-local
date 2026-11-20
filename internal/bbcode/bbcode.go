@@ -15,47 +15,47 @@ import (
 func Render(input string) string {
 	// NUL delimits the placeholders below, so none may come from the input.
 	input = strings.ReplaceAll(input, "\x00", "")
-	s := html.EscapeString(input)
+	text := html.EscapeString(input)
 
 	for _, p := range dropPatterns {
-		s = p.ReplaceAllString(s, "")
+		text = p.ReplaceAllString(text, "")
 	}
 
 	// URLs first, so the scheme check sees the original target; the links hide
 	// behind placeholders from the later passes.
 	var prot protector
-	s = urlWithText.ReplaceAllStringFunc(s, func(m string) string {
+	text = urlWithText.ReplaceAllStringFunc(text, func(m string) string {
 		return expandURLWithText(m, &prot)
 	})
-	s = urlInline.ReplaceAllStringFunc(s, func(m string) string {
+	text = urlInline.ReplaceAllStringFunc(text, func(m string) string {
 		return expandURLInline(m, &prot)
 	})
 
 	// Block-level structures before inline tags so their innards get the
 	// inline pass too.
-	s = spoilerTitled.ReplaceAllString(s, `<details><summary>$1</summary>$2</details>`)
-	s = spoilerPlain.ReplaceAllString(s, `<details><summary>Спойлер</summary>$1</details>`)
-	s = quoteAuthored.ReplaceAllString(s, `<blockquote><cite>$1</cite>$2</blockquote>`)
-	s = quotePlain.ReplaceAllString(s, `<blockquote>$1</blockquote>`)
-	s = listBlock.ReplaceAllStringFunc(s, expandList)
+	text = spoilerTitled.ReplaceAllString(text, `<details><summary>$1</summary>$2</details>`)
+	text = spoilerPlain.ReplaceAllString(text, `<details><summary>Спойлер</summary>$1</details>`)
+	text = quoteAuthored.ReplaceAllString(text, `<blockquote><cite>$1</cite>$2</blockquote>`)
+	text = quotePlain.ReplaceAllString(text, `<blockquote>$1</blockquote>`)
+	text = listBlock.ReplaceAllStringFunc(text, expandList)
 
 	for _, p := range simpleTagPatterns {
-		s = p.re.ReplaceAllString(s, p.repl)
+		text = p.re.ReplaceAllString(text, p.repl)
 	}
 
 	for _, re := range stripTagPatterns {
-		s = re.ReplaceAllString(s, "")
+		text = re.ReplaceAllString(text, "")
 	}
 
-	s = hrPattern.ReplaceAllString(s, "<hr>")
-	s = brPattern.ReplaceAllString(s, "<br>")
+	text = hrPattern.ReplaceAllString(text, "<hr>")
+	text = brPattern.ReplaceAllString(text, "<br>")
 
 	// Source line breaks → <br>, done last. Trade-off: we may paste <br> inside
 	// <pre>/<code> rather than parse nested context — rare in practice.
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	s = strings.ReplaceAll(s, "\n", "<br>")
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\n", "<br>")
 
-	return prot.restore(s)
+	return prot.restore(text)
 }
 
 // protector hides already-generated HTML fragments from later regex passes
@@ -67,11 +67,11 @@ func (p *protector) hide(frag string) string {
 	return "\x00" + strconv.Itoa(len(p.frags)-1) + "\x00"
 }
 
-func (p *protector) restore(s string) string {
+func (p *protector) restore(text string) string {
 	for i, frag := range p.frags {
-		s = strings.Replace(s, "\x00"+strconv.Itoa(i)+"\x00", frag, 1)
+		text = strings.Replace(text, "\x00"+strconv.Itoa(i)+"\x00", frag, 1)
 	}
-	return s
+	return text
 }
 
 // tagPattern pairs a compiled BBCode token matcher with its HTML replacement.
@@ -129,10 +129,10 @@ var (
 
 	stripTagPatterns = func() []*regexp.Regexp {
 		out := make([]*regexp.Regexp, 0, len(stripTags)*2)
-		for _, t := range stripTags {
+		for _, tag := range stripTags {
 			out = append(out,
-				regexp.MustCompile(`(?is)\[`+t+`(?:=[^\]]*)?\]`),
-				regexp.MustCompile(`(?is)\[/`+t+`\]`),
+				regexp.MustCompile(`(?is)\[`+tag+`(?:=[^\]]*)?\]`),
+				regexp.MustCompile(`(?is)\[/`+tag+`\]`),
 			)
 		}
 		return out
@@ -147,12 +147,12 @@ var (
 )
 
 func expandURLWithText(match string, prot *protector) string {
-	m := urlWithText.FindStringSubmatch(match)
-	if len(m) != 3 {
+	groups := urlWithText.FindStringSubmatch(match)
+	if len(groups) != 3 {
 		return match
 	}
-	href := html.UnescapeString(m[1]) // m[1] came through html.EscapeString
-	text := m[2]
+	href := html.UnescapeString(groups[1]) // escaped by Render
+	text := groups[2]
 	if !urlSchemeAllowed(href) {
 		return text
 	}
@@ -163,13 +163,13 @@ func expandURLWithText(match string, prot *protector) string {
 }
 
 func expandURLInline(match string, prot *protector) string {
-	m := urlInline.FindStringSubmatch(match)
-	if len(m) != 2 {
+	groups := urlInline.FindStringSubmatch(match)
+	if len(groups) != 2 {
 		return match
 	}
-	href := html.UnescapeString(m[1])
+	href := html.UnescapeString(groups[1])
 	if !urlSchemeAllowed(href) {
-		return m[1]
+		return groups[1]
 	}
 	// The whole anchor is hidden: the visible text IS the URL, and a
 	// bracketed token in it must render verbatim, not as formatting.
@@ -178,31 +178,31 @@ func expandURLInline(match string, prot *protector) string {
 }
 
 func urlSchemeAllowed(s string) bool {
-	u, err := url.Parse(strings.TrimSpace(s))
+	parsed, err := url.Parse(strings.TrimSpace(s))
 	if err != nil {
 		return false
 	}
-	return allowedSchemes[strings.ToLower(u.Scheme)]
+	return allowedSchemes[strings.ToLower(parsed.Scheme)]
 }
 
 func expandList(match string) string {
-	m := listBlock.FindStringSubmatch(match)
-	if len(m) != 2 {
+	groups := listBlock.FindStringSubmatch(match)
+	if len(groups) != 2 {
 		return match
 	}
 	// Split on [*]: newlines are not <br> yet at this point.
-	parts := listItemSplit.Split(m[1], -1)
-	var b strings.Builder
-	b.WriteString("<ul>")
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p == "" {
+	parts := listItemSplit.Split(groups[1], -1)
+	var out strings.Builder
+	out.WriteString("<ul>")
+	for _, item := range parts {
+		item = strings.TrimSpace(item)
+		if item == "" {
 			continue
 		}
-		b.WriteString("<li>")
-		b.WriteString(p)
-		b.WriteString("</li>")
+		out.WriteString("<li>")
+		out.WriteString(item)
+		out.WriteString("</li>")
 	}
-	b.WriteString("</ul>")
-	return b.String()
+	out.WriteString("</ul>")
+	return out.String()
 }

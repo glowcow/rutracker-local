@@ -114,21 +114,21 @@ func init() {
 
 // normalizeRoute collapses paths to a bounded label set (torrent ids → {id},
 // static assets → one) — else a crawler blows up metric cardinality.
-func normalizeRoute(p string) string {
+func normalizeRoute(path string) string {
 	switch {
-	case p == "/healthz":
+	case path == "/healthz":
 		return "/healthz"
-	case p == "/metrics":
+	case path == "/metrics":
 		return "/metrics"
-	case p == "/api/stats":
+	case path == "/api/stats":
 		return "/api/stats"
-	case p == "/api/forums":
+	case path == "/api/forums":
 		return "/api/forums"
-	case p == "/api/search":
+	case path == "/api/search":
 		return "/api/search"
-	case strings.HasPrefix(p, "/api/torrents/"):
+	case strings.HasPrefix(path, "/api/torrents/"):
 		return "/api/torrents/{id}"
-	case strings.HasPrefix(p, "/api/favorites"):
+	case strings.HasPrefix(path, "/api/favorites"):
 		// Folds /api/favorites and /api/favorites/{id} onto one label —
 		// the method already distinguishes list/add/remove/clear.
 		return "/api/favorites"
@@ -139,11 +139,11 @@ func normalizeRoute(p string) string {
 
 // normalizeMethod keeps the method label set bounded — see the label notes
 // on httpRequests above.
-func normalizeMethod(m string) string {
-	switch m {
+func normalizeMethod(method string) string {
+	switch method {
 	case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut,
 		http.MethodPatch, http.MethodDelete, http.MethodOptions:
-		return m
+		return method
 	default:
 		return "other"
 	}
@@ -183,13 +183,13 @@ func startMetricsRefresher(ctx context.Context, pool *pgxpool.Pool, interval tim
 	statsCache := &versionedCache[store.Stats]{}
 	go func() {
 		refreshMetrics(ctx, pool, statsCache)
-		t := time.NewTicker(interval)
-		defer t.Stop()
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-t.C:
+			case <-ticker.C:
 				refreshMetrics(ctx, pool, statsCache)
 			}
 		}

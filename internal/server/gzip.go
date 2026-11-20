@@ -72,19 +72,19 @@ func (g *gzipResponseWriter) WriteHeader(code int) {
 	g.ResponseWriter.WriteHeader(code)
 }
 
-func (g *gzipResponseWriter) Write(b []byte) (int, error) {
+func (g *gzipResponseWriter) Write(data []byte) (int, error) {
 	if !g.decided {
 		// Mirror net/http's implicit-200 path, including its content
 		// sniffing — decide() needs a Content-Type to look at.
 		if g.Header().Get("Content-Type") == "" {
-			g.Header().Set("Content-Type", http.DetectContentType(b))
+			g.Header().Set("Content-Type", http.DetectContentType(data))
 		}
 		g.decide(http.StatusOK)
 	}
 	if g.gz != nil {
-		return g.gz.Write(b)
+		return g.gz.Write(data)
 	}
-	return g.ResponseWriter.Write(b)
+	return g.ResponseWriter.Write(data)
 }
 
 func (g *gzipResponseWriter) decide(code int) {
@@ -92,26 +92,26 @@ func (g *gzipResponseWriter) decide(code int) {
 		return
 	}
 	g.decided = true
-	h := g.Header()
+	header := g.Header()
 	// Already-encoded responses (promhttp does its own gzip negotiation)
 	// and bodyless statuses pass through untouched.
-	if h.Get("Content-Encoding") != "" ||
+	if header.Get("Content-Encoding") != "" ||
 		code == http.StatusNoContent || code == http.StatusNotModified {
 		return
 	}
-	if !isCompressible(h.Get("Content-Type")) {
+	if !isCompressible(header.Get("Content-Type")) {
 		return
 	}
 	// Tiny bodies grow under gzip. Only skippable when the size is known
 	// up front (FileServer sets it; streamed JSON doesn't).
-	if cl := h.Get("Content-Length"); cl != "" {
+	if cl := header.Get("Content-Length"); cl != "" {
 		if n, err := strconv.Atoi(cl); err == nil && n < 1024 {
 			return
 		}
 	}
-	h.Del("Content-Length")
-	h.Set("Content-Encoding", "gzip")
-	h.Add("Vary", "Accept-Encoding")
+	header.Del("Content-Length")
+	header.Set("Content-Encoding", "gzip")
+	header.Add("Vary", "Accept-Encoding")
 	gz := gzipPool.Get().(*gzip.Writer)
 	gz.Reset(g.ResponseWriter)
 	g.gz = gz

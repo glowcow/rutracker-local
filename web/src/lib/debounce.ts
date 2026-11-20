@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 
 /** Returns `value` delayed by `ms` — useful for damping search input churn. */
 export function useDebounced<T>(value: T, ms = 300): T {
-  const [v, setV] = useState(value);
+  const [debounced, setV] = useState(value);
   useEffect(() => {
-    const t = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(timer);
   }, [value, ms]);
-  return v;
+  return debounced;
 }

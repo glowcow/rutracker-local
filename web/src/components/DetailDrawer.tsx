@@ -131,8 +131,8 @@ export function DetailDrawer({ torrentId, open, onClose, onForumClick }: Props) 
   }, [peers, torrentId, queryClient]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && open) onClose();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && open) onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -477,7 +477,7 @@ const TRACKERS = [
 ];
 
 function buildMagnet(hash: string, title: string): string {
-  const trs = TRACKERS.map((u) => `tr=${encodeURIComponent(u)}`).join("&");
+  const trs = TRACKERS.map((tracker) => `tr=${encodeURIComponent(tracker)}`).join("&");
   return `magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(title)}&${trs}`;
 }
 

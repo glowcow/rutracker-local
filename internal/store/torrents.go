@@ -161,14 +161,14 @@ func (c *CopyIngester) Ingest(ctx context.Context, batch []Torrent) (int, error)
 	if len(batch) == 0 {
 		return 0, nil
 	}
-	n, err := c.conn.CopyFrom(ctx,
+	copied, err := c.conn.CopyFrom(ctx,
 		c.stageTable,
 		torrentCols,
 		pgx.CopyFromSlice(len(batch), func(i int) ([]any, error) {
-			t := batch[i]
+			torrent := batch[i]
 			return []any{
-				t.ID, t.Title, t.ForumID, t.ForumName,
-				t.SizeBytes, t.RegisteredAt, t.Hash, t.Content,
+				torrent.ID, torrent.Title, torrent.ForumID, torrent.ForumName,
+				torrent.SizeBytes, torrent.RegisteredAt, torrent.Hash, torrent.Content,
 			}, nil
 		}),
 	)
@@ -189,7 +189,7 @@ func (c *CopyIngester) Ingest(ctx context.Context, batch []Torrent) (int, error)
 	if _, err := c.conn.Exec(ctx, `TRUNCATE torrents_stage`); err != nil {
 		return 0, fmt.Errorf("truncate stage: %w", err)
 	}
-	return int(n), nil
+	return int(copied), nil
 }
 
 // ingestFiles stores each listing compressed; a torrent without one gets no
@@ -201,15 +201,15 @@ func (c *CopyIngester) ingestFiles(ctx context.Context, batch []Torrent) error {
 		blob  []byte
 	}
 	rows := make([]row, 0, len(batch))
-	for _, t := range batch {
-		if len(t.Files) == 0 {
+	for _, torrent := range batch {
+		if len(torrent.Files) == 0 {
 			continue
 		}
-		blob, err := filelist.Encode(t.Files)
+		blob, err := filelist.Encode(torrent.Files)
 		if err != nil {
-			return fmt.Errorf("encode file list for %d: %w", t.ID, err)
+			return fmt.Errorf("encode file list for %d: %w", torrent.ID, err)
 		}
-		rows = append(rows, row{id: t.ID, count: len(t.Files), blob: blob})
+		rows = append(rows, row{id: torrent.ID, count: len(torrent.Files), blob: blob})
 	}
 	if len(rows) == 0 {
 		return nil
@@ -254,11 +254,11 @@ func GetFiles(ctx context.Context, pool *pgxpool.Pool, id int64) ([]byte, int, e
 // ParseStartNow is the database's now, the sweep cutoff: every NOW() of the
 // parse is later, whatever the clocks say.
 func ParseStartNow(ctx context.Context, pool *pgxpool.Pool) (time.Time, error) {
-	var t time.Time
-	if err := pool.QueryRow(ctx, `SELECT NOW()`).Scan(&t); err != nil {
+	var now time.Time
+	if err := pool.QueryRow(ctx, `SELECT NOW()`).Scan(&now); err != nil {
 		return time.Time{}, fmt.Errorf("parse start now: %w", err)
 	}
-	return t, nil
+	return now, nil
 }
 
 // Sweep deletes the torrents a full parse did not see since before, its
@@ -278,7 +278,7 @@ var ErrNotFound = fmt.Errorf("torrent not found")
 // Get fetches a single torrent INCLUDING the BBCode content field, which is
 // otherwise omitted from list responses.
 func Get(ctx context.Context, pool *pgxpool.Pool, id int64) (Torrent, error) {
-	var t Torrent
+	var torrent Torrent
 	err := pool.QueryRow(ctx, `
 		SELECT t.id, t.title, t.forum_id, t.forum_name, t.size_bytes,
 		       t.registered_at, t.hash, t.content, f.files_count
@@ -286,8 +286,8 @@ func Get(ctx context.Context, pool *pgxpool.Pool, id int64) (Torrent, error) {
 		LEFT JOIN torrent_files f ON f.torrent_id = t.id
 		WHERE t.id = $1
 	`, id).Scan(
-		&t.ID, &t.Title, &t.ForumID, &t.ForumName,
-		&t.SizeBytes, &t.RegisteredAt, &t.Hash, &t.Content, &t.FilesCount,
+		&torrent.ID, &torrent.Title, &torrent.ForumID, &torrent.ForumName,
+		&torrent.SizeBytes, &torrent.RegisteredAt, &torrent.Hash, &torrent.Content, &torrent.FilesCount,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -295,14 +295,14 @@ func Get(ctx context.Context, pool *pgxpool.Pool, id int64) (Torrent, error) {
 		}
 		return Torrent{}, fmt.Errorf("get torrent %d: %w", id, err)
 	}
-	return t, nil
+	return torrent, nil
 }
 
 // Count returns the number of rows in the torrents table.
 func Count(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
-	var n int64
-	err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM torrents`).Scan(&n)
-	return n, err
+	var count int64
+	err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM torrents`).Scan(&count)
+	return count, err
 }
 
 // Stats — aggregate numbers for the dashboard / sidebar panel.
@@ -321,39 +321,39 @@ type TableBloat struct {
 
 // GetTableBloat reads the estimates of pg_stat_user_tables for name.
 func GetTableBloat(ctx context.Context, pool *pgxpool.Pool, name string) (TableBloat, error) {
-	var b TableBloat
+	var bloat TableBloat
 	err := pool.QueryRow(ctx, `
 		SELECT COALESCE(n_live_tup, 0), COALESCE(n_dead_tup, 0)
 		FROM pg_stat_user_tables
 		WHERE relname = $1
-	`, name).Scan(&b.LiveTuples, &b.DeadTuples)
+	`, name).Scan(&bloat.LiveTuples, &bloat.DeadTuples)
 	if err != nil {
 		return TableBloat{}, fmt.Errorf("table bloat %s: %w", name, err)
 	}
-	return b, nil
+	return bloat, nil
 }
 
 // DatabaseSizeBytes is pg_database_size: heap, indexes, TOAST and dead space.
 func DatabaseSizeBytes(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
-	var n int64
-	err := pool.QueryRow(ctx, `SELECT pg_database_size(current_database())`).Scan(&n)
+	var size int64
+	err := pool.QueryRow(ctx, `SELECT pg_database_size(current_database())`).Scan(&size)
 	if err != nil {
 		return 0, fmt.Errorf("database size: %w", err)
 	}
-	return n, nil
+	return size, nil
 }
 
 // GetStats scans the whole table, fine for a few tens of millions of rows.
 func GetStats(ctx context.Context, pool *pgxpool.Pool) (Stats, error) {
-	var s Stats
+	var stats Stats
 	err := pool.QueryRow(ctx, `
 		SELECT
 		  COUNT(*)                                  AS torrents_total,
 		  COALESCE(SUM(size_bytes), 0)              AS total_size_bytes,
 		  COUNT(DISTINCT forum_id)                  AS forums_count
 		FROM torrents
-	`).Scan(&s.TorrentsTotal, &s.TotalSizeBytes, &s.ForumsCount)
-	return s, err
+	`).Scan(&stats.TorrentsTotal, &stats.TotalSizeBytes, &stats.ForumsCount)
+	return stats, err
 }
 
 // Forum is one row of the forums summary.
@@ -379,11 +379,11 @@ func ListForums(ctx context.Context, pool *pgxpool.Pool) ([]Forum, error) {
 
 	var out []Forum
 	for rows.Next() {
-		var f Forum
-		if err := rows.Scan(&f.ID, &f.Name, &f.Count); err != nil {
+		var forum Forum
+		if err := rows.Scan(&forum.ID, &forum.Name, &forum.Count); err != nil {
 			return nil, fmt.Errorf("forums scan: %w", err)
 		}
-		out = append(out, f)
+		out = append(out, forum)
 	}
 	return out, rows.Err()
 }
@@ -448,28 +448,28 @@ func clampQuery(query string) string {
 
 // Search returns one page; COUNT(*) OVER () here would materialise every
 // match before LIMIT, so the total is CountSearch's.
-func Search(ctx context.Context, pool *pgxpool.Pool, p SearchParams) ([]Torrent, error) {
-	if !validSort[p.Sort] {
-		p.Sort = "date"
+func Search(ctx context.Context, pool *pgxpool.Pool, params SearchParams) ([]Torrent, error) {
+	if !validSort[params.Sort] {
+		params.Sort = "date"
 	}
-	if !validDir[p.Dir] {
-		p.Dir = "desc"
+	if !validDir[params.Dir] {
+		params.Dir = "desc"
 	}
-	if p.Limit <= 0 || p.Limit > 200 {
-		p.Limit = 50
+	if params.Limit <= 0 || params.Limit > 200 {
+		params.Limit = 50
 	}
-	if p.Offset < 0 || p.Offset > maxOffset {
-		p.Offset = 0
+	if params.Offset < 0 || params.Offset > maxOffset {
+		params.Offset = 0
 	}
-	p.Query = clampQuery(p.Query)
+	params.Query = clampQuery(params.Query)
 
 	// ORDER BY is built from the sort whitelist — never from raw user input,
 	// so this is not SQL injection territory.
-	dir := strings.ToUpper(p.Dir)
+	dir := strings.ToUpper(params.Dir)
 	var orderBy string
-	switch p.Sort {
+	switch params.Sort {
 	case "relevance":
-		if p.Query == "" {
+		if params.Query == "" {
 			orderBy = "registered_at DESC"
 		} else {
 			orderBy = "ts_rank(search_vec, q.q) " + dir
@@ -480,8 +480,8 @@ func Search(ctx context.Context, pool *pgxpool.Pool, p SearchParams) ([]Torrent,
 		orderBy = "size_bytes " + dir
 	}
 
-	where, args := searchFilter(p.Query, p.ForumID)
-	args = append(args, p.Limit, p.Offset)
+	where, args := searchFilter(params.Query, params.ForumID)
+	args = append(args, params.Limit, params.Offset)
 	// The peer cache joins torrents, not q, so the precedence stays
 	// (torrents LEFT JOIN torrent_peers), q.
 	sql := fmt.Sprintf(`
@@ -500,17 +500,17 @@ func Search(ctx context.Context, pool *pgxpool.Pool, p SearchParams) ([]Torrent,
 	}
 	defer rows.Close()
 
-	items := make([]Torrent, 0, p.Limit)
+	items := make([]Torrent, 0, params.Limit)
 	for rows.Next() {
-		var t Torrent
+		var torrent Torrent
 		if err := rows.Scan(
-			&t.ID, &t.Title, &t.ForumID, &t.ForumName,
-			&t.SizeBytes, &t.RegisteredAt, &t.Hash,
-			&t.Seeders, &t.Leechers, &t.PeersCheckedAt,
+			&torrent.ID, &torrent.Title, &torrent.ForumID, &torrent.ForumName,
+			&torrent.SizeBytes, &torrent.RegisteredAt, &torrent.Hash,
+			&torrent.Seeders, &torrent.Leechers, &torrent.PeersCheckedAt,
 		); err != nil {
 			return nil, fmt.Errorf("search scan: %w", err)
 		}
-		items = append(items, t)
+		items = append(items, torrent)
 	}
 	return items, rows.Err()
 }

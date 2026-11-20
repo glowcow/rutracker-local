@@ -45,14 +45,14 @@ func EncodeJSON(files []File) []byte {
 	// grow the buffer once or twice more.
 	buf := make([]byte, 0, 2+len(files)*48)
 	buf = append(buf, '[')
-	for i, f := range files {
+	for i, file := range files {
 		if i > 0 {
 			buf = append(buf, ',')
 		}
 		buf = append(buf, '[')
-		buf = appendJSONString(buf, f.Path)
+		buf = appendJSONString(buf, file.Path)
 		buf = append(buf, ',')
-		buf = appendInt(buf, f.Size)
+		buf = appendInt(buf, file.Size)
 		buf = append(buf, ']')
 	}
 	return append(buf, ']')
@@ -85,35 +85,35 @@ func Decode(blob []byte) ([]File, error) {
 		return nil, fmt.Errorf("parse file list: %w", err)
 	}
 	files := make([]File, 0, len(tuples))
-	for _, t := range tuples {
-		if len(t) != 2 {
-			return nil, fmt.Errorf("file entry has %d fields, want 2", len(t))
+	for _, tuple := range tuples {
+		if len(tuple) != 2 {
+			return nil, fmt.Errorf("file entry has %d fields, want 2", len(tuple))
 		}
-		var f File
-		if err := json.Unmarshal(t[0], &f.Path); err != nil {
+		var file File
+		if err := json.Unmarshal(tuple[0], &file.Path); err != nil {
 			return nil, fmt.Errorf("parse file path: %w", err)
 		}
-		if err := json.Unmarshal(t[1], &f.Size); err != nil {
+		if err := json.Unmarshal(tuple[1], &file.Size); err != nil {
 			return nil, fmt.Errorf("parse file size: %w", err)
 		}
-		files = append(files, f)
+		files = append(files, file)
 	}
 	return files, nil
 }
 
 const hexDigits = "0123456789abcdef"
 
-// appendJSONString writes s as JSON, Cyrillic unescaped to keep it small and
-// invalid bytes as U+FFFD to keep it valid.
-func appendJSONString(buf []byte, s string) []byte {
+// appendJSONString writes str as JSON, Cyrillic unescaped to keep it small
+// and invalid bytes as U+FFFD to keep it valid.
+func appendJSONString(buf []byte, str string) []byte {
 	buf = append(buf, '"')
-	for i := 0; i < len(s); {
-		c := s[i]
-		if c < utf8.RuneSelf {
+	for i := 0; i < len(str); {
+		char := str[i]
+		if char < utf8.RuneSelf {
 			i++
-			switch c {
+			switch char {
 			case '"', '\\':
-				buf = append(buf, '\\', c)
+				buf = append(buf, '\\', char)
 			case '\n':
 				buf = append(buf, '\\', 'n')
 			case '\r':
@@ -121,40 +121,40 @@ func appendJSONString(buf []byte, s string) []byte {
 			case '\t':
 				buf = append(buf, '\\', 't')
 			default:
-				if c < 0x20 {
-					buf = append(buf, '\\', 'u', '0', '0', hexDigits[c>>4], hexDigits[c&0xF])
+				if char < 0x20 {
+					buf = append(buf, '\\', 'u', '0', '0', hexDigits[char>>4], hexDigits[char&0xF])
 				} else {
-					buf = append(buf, c)
+					buf = append(buf, char)
 				}
 			}
 			continue
 		}
-		r, size := utf8.DecodeRuneInString(s[i:])
+		r, size := utf8.DecodeRuneInString(str[i:])
 		if r == utf8.RuneError && size == 1 {
 			buf = append(buf, "�"...)
 			i++
 			continue
 		}
-		buf = append(buf, s[i:i+size]...)
+		buf = append(buf, str[i:i+size]...)
 		i += size
 	}
 	return append(buf, '"')
 }
 
-func appendInt(buf []byte, n int64) []byte {
-	if n == 0 {
+func appendInt(buf []byte, num int64) []byte {
+	if num == 0 {
 		return append(buf, '0')
 	}
-	if n < 0 {
+	if num < 0 {
 		buf = append(buf, '-')
-		n = -n
+		num = -num
 	}
 	var tmp [20]byte
-	p := len(tmp)
-	for n > 0 {
-		p--
-		tmp[p] = byte('0' + n%10)
-		n /= 10
+	pos := len(tmp)
+	for num > 0 {
+		pos--
+		tmp[pos] = byte('0' + num%10)
+		num /= 10
 	}
-	return append(buf, tmp[p:]...)
+	return append(buf, tmp[pos:]...)
 }

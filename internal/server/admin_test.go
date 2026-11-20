@@ -29,13 +29,13 @@ func TestRequireAdmin(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := requireAdmin(tc.token, ok)
+			handler := requireAdmin(tc.token, ok)
 			req := httptest.NewRequest(http.MethodPost, "/api/admin/parse", nil)
 			if tc.authHeader != "" {
 				req.Header.Set("Authorization", tc.authHeader)
 			}
 			rec := httptest.NewRecorder()
-			h(rec, req)
+			handler(rec, req)
 			if rec.Code != tc.want {
 				t.Fatalf("status = %d, want %d", rec.Code, tc.want)
 			}
@@ -49,10 +49,10 @@ func TestParseStartSingleFlight(t *testing.T) {
 	// anything (so no DB is touched).
 	ctrl.running.Store(true)
 
-	h := parseStartHandler(ctrl, "/dumps")
+	handler := parseStartHandler(ctrl, "/dumps")
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/parse", strings.NewReader(`{"sweep":false}`))
 	rec := httptest.NewRecorder()
-	h(rec, req)
+	handler(rec, req)
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d (409 while running)", rec.Code, http.StatusConflict)
@@ -60,11 +60,11 @@ func TestParseStartSingleFlight(t *testing.T) {
 }
 
 func TestParseHubReplayAndLive(t *testing.T) {
-	h := newParseHub()
-	h.publish(ingest.Event{Kind: "status", Status: "running"})
-	h.publish(ingest.Event{Kind: "log", Msg: "parse start"})
+	hub := newParseHub()
+	hub.publish(ingest.Event{Kind: "status", Status: "running"})
+	hub.publish(ingest.Event{Kind: "log", Msg: "parse start"})
 
-	replay, ch, cancel := h.subscribe()
+	replay, ch, cancel := hub.subscribe()
 	defer cancel()
 
 	if len(replay) != 2 {
@@ -72,7 +72,7 @@ func TestParseHubReplayAndLive(t *testing.T) {
 	}
 
 	// A new event after subscribing must arrive live.
-	h.publish(ingest.Event{Kind: "log", Msg: "parse done"})
+	hub.publish(ingest.Event{Kind: "log", Msg: "parse done"})
 	select {
 	case ev := <-ch:
 		if ev.Msg != "parse done" {
@@ -83,8 +83,8 @@ func TestParseHubReplayAndLive(t *testing.T) {
 	}
 
 	// reset empties the buffer: a new subscriber sees nothing.
-	h.reset()
-	replay2, _, cancel2 := h.subscribe()
+	hub.reset()
+	replay2, _, cancel2 := hub.subscribe()
 	defer cancel2()
 	if len(replay2) != 0 {
 		t.Fatalf("replay after reset = %d, want 0", len(replay2))

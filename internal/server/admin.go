@@ -53,10 +53,10 @@ type dumpJSON struct {
 	Mtime     string `json:"mtime"` // RFC3339
 }
 
-func isDumpName(n string) bool {
-	return strings.HasSuffix(n, ".xml") ||
-		strings.HasSuffix(n, ".xml.xz") ||
-		strings.HasSuffix(n, ".xml.gz")
+func isDumpName(name string) bool {
+	return strings.HasSuffix(name, ".xml") ||
+		strings.HasSuffix(name, ".xml.xz") ||
+		strings.HasSuffix(name, ".xml.gz")
 }
 
 // dumpsHandler lists the dumps for the panel; a missing directory is an empty
@@ -70,16 +70,16 @@ func dumpsHandler(dumpDir string) http.HandlerFunc {
 			return
 		}
 		out := make([]dumpJSON, 0, len(entries))
-		for _, e := range entries {
-			if e.IsDir() || !isDumpName(e.Name()) {
+		for _, entry := range entries {
+			if entry.IsDir() || !isDumpName(entry.Name()) {
 				continue
 			}
-			info, err := e.Info()
+			info, err := entry.Info()
 			if err != nil {
 				continue
 			}
 			out = append(out, dumpJSON{
-				Name:      e.Name(),
+				Name:      entry.Name(),
 				SizeBytes: info.Size(),
 				Mtime:     info.ModTime().UTC().Format(time.RFC3339),
 			})
@@ -102,20 +102,20 @@ type runJSON struct {
 	DurationS  int64   `json:"duration_s"`
 }
 
-func toRunJSON(r store.ParserRun) runJSON {
+func toRunJSON(run store.ParserRun) runJSON {
 	rj := runJSON{
-		ID:        r.ID,
-		StartedAt: r.StartedAt.UTC().Format(time.RFC3339),
-		Source:    filepath.Base(r.Source),
-		Rows:      r.RowsInserted,
-		Swept:     r.RowsSwept,
-		Sweep:     r.Sweep,
-		Status:    r.Status,
+		ID:        run.ID,
+		StartedAt: run.StartedAt.UTC().Format(time.RFC3339),
+		Source:    filepath.Base(run.Source),
+		Rows:      run.RowsInserted,
+		Swept:     run.RowsSwept,
+		Sweep:     run.Sweep,
+		Status:    run.Status,
 	}
-	if r.FinishedAt != nil {
-		f := r.FinishedAt.UTC().Format(time.RFC3339)
+	if run.FinishedAt != nil {
+		f := run.FinishedAt.UTC().Format(time.RFC3339)
 		rj.FinishedAt = &f
-		rj.DurationS = int64(r.FinishedAt.Sub(r.StartedAt).Seconds())
+		rj.DurationS = int64(run.FinishedAt.Sub(run.StartedAt).Seconds())
 	}
 	return rj
 }
@@ -175,11 +175,11 @@ func parseStreamHandler(ctrl *parseController) http.HandlerFunc {
 		defer cancel()
 
 		writeEvent := func(ev ingest.Event) bool {
-			b, err := json.Marshal(ev)
+			data, err := json.Marshal(ev)
 			if err != nil {
 				return true // skip a bad event, keep the stream open
 			}
-			if _, err := fmt.Fprintf(w, "data: %s\n\n", b); err != nil {
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
 				return false
 			}
 			return rc.Flush() == nil

@@ -35,19 +35,19 @@ func TestUnknownAPIPathIsJSON404(t *testing.T) {
 		{http.MethodGet, "/api/stats", http.StatusOK, "application/json"},
 		{http.MethodGet, "/some/page", http.StatusOK, "text/html"},
 	}
-	for _, c := range cases {
+	for _, testCase := range cases {
 		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, httptest.NewRequest(c.method, c.path, nil))
-		if rec.Code != c.code {
-			t.Errorf("%s %s: status %d, want %d", c.method, c.path, rec.Code, c.code)
+		mux.ServeHTTP(rec, httptest.NewRequest(testCase.method, testCase.path, nil))
+		if rec.Code != testCase.code {
+			t.Errorf("%s %s: status %d, want %d", testCase.method, testCase.path, rec.Code, testCase.code)
 		}
-		if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, c.ctype) {
-			t.Errorf("%s %s: content type %q, want %s", c.method, c.path, got, c.ctype)
+		if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, testCase.ctype) {
+			t.Errorf("%s %s: content type %q, want %s", testCase.method, testCase.path, got, testCase.ctype)
 		}
-		if c.code == http.StatusNotFound {
+		if testCase.code == http.StatusNotFound {
 			var body map[string]string
 			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body["error"] == "" {
-				t.Errorf("%s %s: body %q is not a JSON error", c.method, c.path, rec.Body.String())
+				t.Errorf("%s %s: body %q is not a JSON error", testCase.method, testCase.path, rec.Body.String())
 			}
 		}
 	}
@@ -70,11 +70,11 @@ func TestTransmissionStatusCarriesTheLabel(t *testing.T) {
 		{"on, named", transmission.New(daemon.URL, "", "", ""), "torrwheel", `{"configured":true,"online":true,"label":"torrwheel"}`},
 		{"on, unnamed", transmission.New(daemon.URL, "", "", ""), "", `{"configured":true,"online":true}`},
 	}
-	for _, c := range cases {
+	for _, testCase := range cases {
 		rec := httptest.NewRecorder()
-		transmissionStatusHandler(c.client, c.label)(rec, httptest.NewRequest(http.MethodGet, "/api/transmission/status", nil))
-		if got := strings.TrimSpace(rec.Body.String()); got != c.want {
-			t.Errorf("%s: got %s, want %s", c.name, got, c.want)
+		transmissionStatusHandler(testCase.client, testCase.label)(rec, httptest.NewRequest(http.MethodGet, "/api/transmission/status", nil))
+		if got := strings.TrimSpace(rec.Body.String()); got != testCase.want {
+			t.Errorf("%s: got %s, want %s", testCase.name, got, testCase.want)
 		}
 	}
 }

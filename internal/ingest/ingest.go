@@ -84,9 +84,9 @@ type countingReader struct {
 }
 
 func (c *countingReader) Read(p []byte) (int, error) {
-	n, err := c.r.Read(p)
-	c.n.Add(int64(n))
-	return n, err
+	count, err := c.r.Read(p)
+	c.n.Add(int64(count))
+	return count, err
 }
 
 // Run streams opts.Source into Postgres and, with Sweep, deletes what the dump
@@ -127,19 +127,19 @@ func Run(ctx context.Context, databaseURL string, opts Options, emit Emitter) (R
 		emit.log("info", "glob resolved", opts.Source+" → "+resolved)
 	}
 
-	f, err := os.Open(resolved)
+	file, err := os.Open(resolved)
 	if err != nil {
 		return Result{}, fmt.Errorf("open %s: %w", resolved, err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { _ = file.Close() }()
 
-	st, err := f.Stat()
+	st, err := file.Stat()
 	if err != nil {
 		return Result{}, fmt.Errorf("stat %s: %w", resolved, err)
 	}
 	totalBytes := st.Size()
 
-	counter := &countingReader{r: f}
+	counter := &countingReader{r: file}
 	src, err := parser.DecompressorFor(resolved, counter)
 	if err != nil {
 		return Result{}, err
@@ -180,10 +180,10 @@ func Run(ctx context.Context, databaseURL string, opts Options, emit Emitter) (R
 
 	// One decoder feeds batches to N workers, each with its own CopyIngester;
 	// errgroup carries the first error.
-	g, gctx := errgroup.WithContext(ctx)
+	group, gctx := errgroup.WithContext(ctx)
 	batches := make(chan []store.Torrent, opts.NumWorkers)
 
-	g.Go(func() error {
+	group.Go(func() error {
 		defer close(batches)
 		batch := make([]store.Torrent, 0, opts.BatchSize)
 		err := parser.Parse(src, func(t store.Torrent) error {
@@ -213,18 +213,18 @@ func Run(ctx context.Context, databaseURL string, opts Options, emit Emitter) (R
 	})
 
 	for i := 0; i < opts.NumWorkers; i++ {
-		g.Go(func() error {
+		group.Go(func() error {
 			ing, err := store.NewCopyIngester(gctx, pool)
 			if err != nil {
 				return err
 			}
 			defer ing.Close()
 			for b := range batches {
-				n, err := ing.Ingest(gctx, b)
+				count, err := ing.Ingest(gctx, b)
 				if err != nil {
 					return err
 				}
-				total.Add(int64(n))
+				total.Add(int64(count))
 			}
 			return nil
 		})
@@ -236,25 +236,25 @@ func Run(ctx context.Context, databaseURL string, opts Options, emit Emitter) (R
 	progressDone := make(chan struct{})
 	go func() {
 		defer close(progressDone)
-		t := time.NewTicker(5 * time.Second)
-		defer t.Stop()
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-progressCtx.Done():
 				return
-			case now := <-t.C:
-				p := snapshot(start, now, total.Load(), counter.n.Load(), totalBytes)
+			case now := <-ticker.C:
+				progress := snapshot(start, now, total.Load(), counter.n.Load(), totalBytes)
 				slog.Info("parse progress",
-					"rows", p.Rows, "read_mb", p.ReadMB, "total_mb", p.TotalMB,
-					"pct", fmt.Sprintf("%.1f", p.Pct), "rate_rows_s", p.RateRowsS, "eta_s", p.EtaS)
-				emit.send(Event{Kind: "progress", Progress: &p})
+					"rows", progress.Rows, "read_mb", progress.ReadMB, "total_mb", progress.TotalMB,
+					"pct", fmt.Sprintf("%.1f", progress.Pct), "rate_rows_s", progress.RateRowsS, "eta_s", progress.EtaS)
+				emit.send(Event{Kind: "progress", Progress: &progress})
 				emit.log("info", "parse progress", fmt.Sprintf("rows=%d  %d/%d MB  %.1f%%  %d/s  eta %s",
-					p.Rows, p.ReadMB, p.TotalMB, p.Pct, p.RateRowsS, fmtDur(p.EtaS)))
+					progress.Rows, progress.ReadMB, progress.TotalMB, progress.Pct, progress.RateRowsS, fmtDur(progress.EtaS)))
 			}
 		}
 	}()
 
-	waitErr := g.Wait()
+	waitErr := group.Wait()
 	stopProgress()
 	<-progressDone
 
@@ -338,15 +338,15 @@ func snapshot(start, now time.Time, rows, readBytes, totalBytes int64) Progress 
 }
 
 // fmtDur renders seconds as m:ss (or h:mm:ss past an hour).
-func fmtDur(s int64) string {
-	if s < 0 {
-		s = 0
+func fmtDur(seconds int64) string {
+	if seconds < 0 {
+		seconds = 0
 	}
-	h := s / 3600
-	m := (s % 3600) / 60
-	sec := s % 60
-	if h > 0 {
-		return fmt.Sprintf("%d:%02d:%02d", h, m, sec)
+	hours := seconds / 3600
+	minutes := (seconds % 3600) / 60
+	sec := seconds % 60
+	if hours > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", hours, minutes, sec)
 	}
-	return fmt.Sprintf("%d:%02d", m, sec)
+	return fmt.Sprintf("%d:%02d", minutes, sec)
 }

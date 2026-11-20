@@ -23,28 +23,28 @@ export function FilterChips({ chips, onRemove, onClearAll }: Props) {
   if (chips.length === 0) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 min-w-0">
-      {chips.map((c) => (
+      {chips.map((chip) => (
         // Two triggers side by side, each with its own tooltip: Radix wants one
         // trigger per root.
         <div
-          key={c.id}
+          key={chip.id}
           className="flex items-center gap-1 text-[12px] min-w-0 max-w-full text-[var(--color-ink)]"
         >
-          <Tooltip text={c.tooltip}>
+          <Tooltip text={chip.tooltip}>
             <div className="flex items-baseline gap-2 min-w-0 cursor-default">
               {/* Label is dropped below lg — the value alone is unambiguous
                   there, and each result card repeats the forum anyway. */}
               <span className="swiss-eyebrow text-[10px] leading-none shrink-0 hidden lg:inline">
-                {c.label}:
+                {chip.label}:
               </span>
               {/* Clips only once the row runs out of room; no fixed cap. */}
-              <span className="font-medium leading-none truncate">{c.value}</span>
+              <span className="font-medium leading-none truncate">{chip.value}</span>
             </div>
           </Tooltip>
           <Tooltip text={t.chipRemoveFilter}>
             <button
               type="button"
-              onClick={() => onRemove(c.id)}
+              onClick={() => onRemove(chip.id)}
               aria-label={t.chipRemoveFilter}
               // -my-1 shrinks the 20px hit area's layout box to the 12px
               // text line so the ✕ centres on the value instead of sitting low.

@@ -105,7 +105,7 @@ export function Header({
             <Search className="size-4 text-[var(--color-ink-muted)] shrink-0" />
             <input
               value={query}
-              onChange={(e) => onQueryChange(e.target.value)}
+              onChange={(event) => onQueryChange(event.target.value)}
               placeholder={t.searchPlaceholder}
               name="search"
               autoComplete="off"

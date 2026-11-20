@@ -18,5 +18,9 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    // One letter only for an unused value, a coordinate or a size.
+    rules: {
+      'id-length': ['error', { min: 2, exceptions: ['_', 'x', 'y', 'z', 'w', 'h'], properties: 'never' }],
+    },
   },
 ])

@@ -98,7 +98,7 @@ func downloadHandler(pool *pgxpool.Pool, tc *transmission.Client) http.HandlerFu
 			return
 		}
 
-		t, err := store.Get(r.Context(), pool, id)
+		torrent, err := store.Get(r.Context(), pool, id)
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				writeJSON(w, http.StatusNotFound, errResp("not found"))
@@ -108,12 +108,12 @@ func downloadHandler(pool *pgxpool.Pool, tc *transmission.Client) http.HandlerFu
 			writeJSON(w, http.StatusInternalServerError, errResp("get failed"))
 			return
 		}
-		if !hashRe.MatchString(strings.ToLower(t.Hash)) {
+		if !hashRe.MatchString(strings.ToLower(torrent.Hash)) {
 			writeJSON(w, http.StatusUnprocessableEntity, errResp("torrent has no valid hash"))
 			return
 		}
 
-		name, err := tc.Add(r.Context(), buildMagnet(t.Hash, t.Title))
+		name, err := tc.Add(r.Context(), buildMagnet(torrent.Hash, torrent.Title))
 		if err != nil {
 			if errors.Is(err, transmission.ErrDuplicate) {
 				writeJSON(w, http.StatusOK, downloadResponse{Status: "duplicate", Name: name})
@@ -140,10 +140,10 @@ var trackers = []string{
 }
 
 func buildMagnet(hash, title string) string {
-	v := url.Values{}
-	v.Set("dn", title)
+	params := url.Values{}
+	params.Set("dn", title)
 	for _, tr := range trackers {
-		v.Add("tr", tr)
+		params.Add("tr", tr)
 	}
-	return "magnet:?xt=urn:btih:" + hash + "&" + v.Encode()
+	return "magnet:?xt=urn:btih:" + hash + "&" + params.Encode()
 }

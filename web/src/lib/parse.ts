@@ -60,7 +60,7 @@ export type SSEvent = {
 // `Authorization: Bearer` on the mutating call. Verified server-side. ──
 const TOKEN_KEY = "rt_admin_token";
 export const getToken = (): string => localStorage.getItem(TOKEN_KEY) ?? "";
-export const setToken = (v: string): void => localStorage.setItem(TOKEN_KEY, v);
+export const setToken = (token: string): void => localStorage.setItem(TOKEN_KEY, token);
 export const clearToken = (): void => localStorage.removeItem(TOKEN_KEY);
 
 // ── Read API (open) ──
@@ -78,29 +78,29 @@ export type StartOpts = { source: string; batch_size: number; sweep: boolean };
 // Resolves on 202; otherwise throws Error(code): "conflict", "unauthorized",
 // "disabled" or "http" — the panel maps the code to a message.
 export async function startParse(opts: StartOpts, token: string): Promise<void> {
-  const r = await send("/api/admin/parse", {
+  const resp = await send("/api/admin/parse", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(opts),
   });
-  if (r.status === 202) return;
+  if (resp.status === 202) return;
   const code =
-    r.status === 409 ? "conflict" :
-    r.status === 401 ? "unauthorized" :
-    r.status === 503 ? "disabled" :
+    resp.status === 409 ? "conflict" :
+    resp.status === 401 ? "unauthorized" :
+    resp.status === 503 ? "disabled" :
     "http";
   throw new Error(code);
 }
 
 // fmtDur renders seconds as m:ss (or h:mm:ss past an hour).
-export function fmtDur(s: number): string {
-  s = Math.max(0, Math.floor(s));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+export function fmtDur(seconds: number): string {
+  seconds = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const sec = seconds % 60;
+  const mm = hours > 0 ? String(minutes).padStart(2, "0") : String(minutes);
   const ss = String(sec).padStart(2, "0");
-  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
 // hhmmss pulls HH:MM:SS out of an RFC3339 timestamp for compact log display.

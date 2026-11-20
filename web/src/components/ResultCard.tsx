@@ -35,12 +35,12 @@ export const ResultCard = memo(function ResultCard({
 
   const onClick = () => onSelect(torrent.id);
 
-  const handleKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
     // Only the row itself: Enter on a nested control bubbles here, and
     // preventDefault would swallow that control's own action.
-    if (e.target !== e.currentTarget) return;
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
+    if (event.target !== event.currentTarget) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
       onClick();
     }
   };
@@ -72,8 +72,8 @@ export const ResultCard = memo(function ResultCard({
           <ForumValue
             label={t.metaForum}
             value={torrent.forum_name}
-            onClick={(e) => {
-              e.stopPropagation();
+            onClick={(event) => {
+              event.stopPropagation();
               onForumClick(torrent.forum_id);
             }}
           />

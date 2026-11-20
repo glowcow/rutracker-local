@@ -83,10 +83,10 @@ func Run(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) error {
 
 	// A `running` parser_runs row at boot is always an orphan (single replica
 	// can't survive a restart) — mark it failed so status doesn't hang forever.
-	if n, err := store.ReconcileRunningRuns(ctx, pool); err != nil {
+	if count, err := store.ReconcileRunningRuns(ctx, pool); err != nil {
 		slog.Warn("reconcile orphaned parser runs", "err", err)
-	} else if n > 0 {
-		slog.Info("reconciled orphaned parser runs", "count", n)
+	} else if count > 0 {
+		slog.Info("reconciled orphaned parser runs", "count", count)
 	}
 
 	slog.Info("listening", "addr", cfg.HTTPAddr)
@@ -116,10 +116,10 @@ func securityHeaders(next http.Handler) http.Handler {
 		"img-src 'self' data:; object-src 'none'; base-uri 'self'; " +
 		"frame-ancestors 'none'"
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h := w.Header()
-		h.Set("Content-Security-Policy", csp)
-		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("Referrer-Policy", "no-referrer")
+		header := w.Header()
+		header.Set("Content-Security-Policy", csp)
+		header.Set("X-Content-Type-Options", "nosniff")
+		header.Set("Referrer-Policy", "no-referrer")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -212,25 +212,25 @@ func spaHandler(distFS fs.FS) http.Handler {
 			w.Header().Set("Cache-Control", "public, max-age=86400")
 		}
 		if _, err := fs.Stat(distFS, path); err != nil {
-			f, err := distFS.Open("index.html")
+			index, err := distFS.Open("index.html")
 			if err != nil {
 				http.NotFound(w, r)
 				return
 			}
-			defer func() { _ = f.Close() }()
+			defer func() { _ = index.Close() }()
 			w.Header().Set("Cache-Control", "no-cache")
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_, _ = io.Copy(w, f)
+			_, _ = io.Copy(w, index)
 			return
 		}
 		fileServer.ServeHTTP(w, r)
 	})
 }
 
-func writeJSON(w http.ResponseWriter, code int, v any) {
+func writeJSON(w http.ResponseWriter, code int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(payload)
 }
 
 // accessLog logs request method/path/status/duration as one slog line.

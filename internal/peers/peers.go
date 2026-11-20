@@ -148,22 +148,22 @@ func parsePeers(body []byte) (Stat, error) {
 		// No seed block at all → anonymous view → session invalid.
 		return Stat{}, ErrAnon
 	}
-	s, _ := strconv.Atoi(string(sm[1]))
-	l := 0
+	seeders, _ := strconv.Atoi(string(sm[1]))
+	leechers := 0
 	if lm := leechRe.FindSubmatch(body); lm != nil {
-		l, _ = strconv.Atoi(string(lm[1]))
+		leechers, _ = strconv.Atoi(string(lm[1]))
 	}
-	return Stat{Seeders: s, Leechers: l}, nil
+	return Stat{Seeders: seeders, Leechers: leechers}, nil
 }
 
 func (c *Client) ensureLogin(ctx context.Context) (string, error) {
-	v, err, _ := c.login.Do("login", func() (any, error) {
+	result, err, _ := c.login.Do("login", func() (any, error) {
 		return c.doLogin(ctx)
 	})
 	if err != nil {
 		return "", err
 	}
-	return v.(string), nil
+	return result.(string), nil
 }
 
 func (c *Client) doLogin(ctx context.Context) (string, error) {
@@ -226,22 +226,22 @@ type limiter struct {
 func (l *limiter) wait(ctx context.Context) error {
 	l.mu.Lock()
 	now := time.Now()
-	var d time.Duration
+	var delay time.Duration
 	if now.Before(l.next) {
-		d = l.next.Sub(now)
+		delay = l.next.Sub(now)
 		l.next = l.next.Add(l.gap)
 	} else {
 		l.next = now.Add(l.gap)
 	}
 	l.mu.Unlock()
 
-	if d <= 0 {
+	if delay <= 0 {
 		return nil
 	}
-	t := time.NewTimer(d)
-	defer t.Stop()
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
 	select {
-	case <-t.C:
+	case <-timer.C:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

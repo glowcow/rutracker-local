@@ -6,14 +6,14 @@ import { Tooltip } from "./Tooltip";
 import { cn } from "../lib/cn";
 
 const THEMES: { id: Theme; icon: LucideIcon; label: (t: Dict) => string }[] = [
-  { id: "system", icon: Monitor, label: (t) => t.themeSystem },
-  { id: "light", icon: Sun, label: (t) => t.themeLight },
-  { id: "dark", icon: Moon, label: (t) => t.themeDark },
+  { id: "system", icon: Monitor, label: (dict) => dict.themeSystem },
+  { id: "light", icon: Sun, label: (dict) => dict.themeLight },
+  { id: "dark", icon: Moon, label: (dict) => dict.themeDark },
 ];
 
 const PALETTES: { id: Palette; label: (t: Dict) => string }[] = [
-  { id: "classic", label: (t) => t.paletteClassic },
-  { id: "warm", label: (t) => t.paletteWarm },
+  { id: "classic", label: (dict) => dict.paletteClassic },
+  { id: "warm", label: (dict) => dict.paletteWarm },
 ];
 
 const ROW = cn(
@@ -32,11 +32,11 @@ export function SettingsMenu() {
   // Closes on Escape and on a press outside; the gear itself toggles.
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
     };
-    const onPointer = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    const onPointer = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
     document.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onPointer);
@@ -55,7 +55,7 @@ export function SettingsMenu() {
           aria-label={t.settings}
           aria-expanded={open}
           aria-haspopup="true"
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => setOpen((wasOpen) => !wasOpen)}
           className={cn(
             "size-10 grid place-items-center rounded-md cursor-pointer transition-colors duration-150",
             open ? "text-[var(--color-accent)]" : "text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]",
@@ -79,9 +79,9 @@ export function SettingsMenu() {
           {t.theme}
         </div>
         <div role="radiogroup" aria-labelledby="settings-theme" className="flex items-center -ml-2.5">
-          {THEMES.map(({ id, icon: Icon, label }, i) => (
+          {THEMES.map(({ id, icon: Icon, label }, index) => (
             <Fragment key={id}>
-              {i > 0 && <span aria-hidden="true" className="w-px h-4 bg-[var(--color-rule)]" />}
+              {index > 0 && <span aria-hidden="true" className="w-px h-4 bg-[var(--color-rule)]" />}
               <Tooltip text={label(t)} side="bottom">
                 <button
                   type="button"

@@ -20,11 +20,11 @@ func scoped(t *testing.T) string {
 	if raw == "" {
 		t.Skip("DATABASE_URL not set — skipping integration test")
 	}
-	u, err := url.Parse(raw)
+	parsed, err := url.Parse(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := strings.TrimPrefix(u.Path, "/") + "_ingest"
+	name := strings.TrimPrefix(parsed.Path, "/") + "_ingest"
 	admin, err := pgxpool.New(t.Context(), raw)
 	if err != nil {
 		t.Fatal(err)
@@ -35,11 +35,11 @@ func scoped(t *testing.T) string {
 			t.Fatal(err)
 		}
 	}
-	u.Path = "/" + name
-	if err := db.MigrateUp(t.Context(), u.String()); err != nil {
+	parsed.Path = "/" + name
+	if err := db.MigrateUp(t.Context(), parsed.String()); err != nil {
 		t.Fatal(err)
 	}
-	return u.String()
+	return parsed.String()
 }
 
 func TestRun(t *testing.T) {

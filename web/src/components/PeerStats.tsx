@@ -11,19 +11,19 @@ import { MetaLabel } from "./MetaRow";
 const greyCls = "text-[var(--color-ink-muted)]";
 
 // "только что" / "5 ч назад" — short units so no RU pluralisation is needed.
-function timeAgo(iso: string, t: Dict): string {
+function timeAgo(iso: string, dict: Dict): string {
   const min = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
-  if (min < 1) return t.peersNow;
-  if (min < 60) return `${min} ${t.peersMin} ${t.peersAgo}`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h} ${t.peersHour} ${t.peersAgo}`;
-  return `${Math.floor(h / 24)} ${t.peersDay} ${t.peersAgo}`;
+  if (min < 1) return dict.peersNow;
+  if (min < 60) return `${min} ${dict.peersMin} ${dict.peersAgo}`;
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return `${hours} ${dict.peersHour} ${dict.peersAgo}`;
+  return `${Math.floor(hours / 24)} ${dict.peersDay} ${dict.peersAgo}`;
 }
 
-function reasonLabel(error: PeersError | null, t: Dict): string {
-  if (error === "auth") return t.peersErrAuth;
-  if (error === "unavailable") return t.peersErrUnavailable;
-  return t.peersStale;
+function reasonLabel(error: PeersError | null, dict: Dict): string {
+  if (error === "auth") return dict.peersErrAuth;
+  if (error === "unavailable") return dict.peersErrUnavailable;
+  return dict.peersStale;
 }
 
 // Inline and em-sized, so the icons scale with the text and sit on the

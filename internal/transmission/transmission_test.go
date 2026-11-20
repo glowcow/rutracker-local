@@ -39,13 +39,13 @@ func daemon(t *testing.T, reply string) (*httptest.Server, *atomic.Int32) {
 
 func TestAdd(t *testing.T) {
 	srv, calls := daemon(t, `{"result":"success","arguments":{"torrent-added":{"name":"Film"}}}`)
-	c := New(srv.URL, "tx.lan", "u", "p")
-	name, err := c.Add(t.Context(), "magnet:?xt=1")
+	client := New(srv.URL, "tx.lan", "u", "p")
+	name, err := client.Add(t.Context(), "magnet:?xt=1")
 	if err != nil || name != "Film" || calls.Load() != 2 {
 		t.Fatalf("add: %q %v after %d calls", name, err, calls.Load())
 	}
 	// The session id is kept: the next call needs no handshake.
-	if _, err := c.Add(t.Context(), "magnet:?xt=1"); err != nil || calls.Load() != 3 {
+	if _, err := client.Add(t.Context(), "magnet:?xt=1"); err != nil || calls.Load() != 3 {
 		t.Errorf("second add: %v after %d calls", err, calls.Load())
 	}
 }

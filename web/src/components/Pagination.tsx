@@ -18,8 +18,8 @@ export function Pagination({ page, pageSize, total, onChange }: Props) {
 
   const pages = buildPageWindow(page, lastPage);
 
-  const go = (p: number) => {
-    const clamped = Math.max(0, Math.min(p, lastPage));
+  const go = (target: number) => {
+    const clamped = Math.max(0, Math.min(target, lastPage));
     if (clamped !== page) {
       onChange(clamped);
     }
@@ -38,18 +38,18 @@ export function Pagination({ page, pageSize, total, onChange }: Props) {
         <ChevronLeft className="size-3.5" />
       </StepButton>
 
-      {pages.map((p, i) =>
-        p === "…" ? (
+      {pages.map((entry, index) =>
+        entry === "…" ? (
           <span
-            key={`gap-${i}`}
+            key={`gap-${index}`}
             className="text-[12px] text-[var(--color-ink-muted)] tabular-nums"
             aria-hidden="true"
           >
             …
           </span>
         ) : (
-          <PageButton key={p} active={p === page} onClick={() => go(p)}>
-            {p + 1}
+          <PageButton key={entry} active={entry === page} onClick={() => go(entry)}>
+            {entry + 1}
           </PageButton>
         ),
       )}
@@ -68,18 +68,18 @@ export function Pagination({ page, pageSize, total, onChange }: Props) {
 function buildPageWindow(page: number, lastPage: number): (number | "…")[] {
   const totalPages = lastPage + 1;
   if (totalPages <= 7) {
-    return Array.from({ length: totalPages }, (_, i) => i);
+    return Array.from({ length: totalPages }, (_, index) => index);
   }
   const window: (number | "…")[] = [];
-  const add = (p: number | "…") => {
-    if (typeof p === "number" && (p < 0 || p > lastPage)) return;
-    if (window[window.length - 1] === p) return;
-    window.push(p);
+  const add = (entry: number | "…") => {
+    if (typeof entry === "number" && (entry < 0 || entry > lastPage)) return;
+    if (window[window.length - 1] === entry) return;
+    window.push(entry);
   };
 
   add(0);
   if (page > 2) add("…");
-  for (let p = page - 1; p <= page + 1; p++) add(p);
+  for (let near = page - 1; near <= page + 1; near++) add(near);
   if (page < lastPage - 2) add("…");
   add(lastPage);
   return window;

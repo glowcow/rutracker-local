@@ -138,14 +138,14 @@ export async function sendToTransmission(id: number): Promise<DownloadResult> {
   return res.json() as Promise<DownloadResult>;
 }
 
-export function searchTorrents(p: SearchParams) {
+export function searchTorrents(params: SearchParams) {
   const qs = new URLSearchParams();
-  if (p.q) qs.set("q", p.q);
-  if (p.forum_id) qs.set("forum_id", String(p.forum_id));
-  if (p.sort) qs.set("sort", p.sort);
-  if (p.dir) qs.set("dir", p.dir);
-  if (p.offset !== undefined) qs.set("offset", String(p.offset));
-  if (p.limit !== undefined) qs.set("limit", String(p.limit));
+  if (params.q) qs.set("q", params.q);
+  if (params.forum_id) qs.set("forum_id", String(params.forum_id));
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.dir) qs.set("dir", params.dir);
+  if (params.offset !== undefined) qs.set("offset", String(params.offset));
+  if (params.limit !== undefined) qs.set("limit", String(params.limit));
   const url = qs.toString() ? `/api/search?${qs}` : "/api/search";
   return getJSON<SearchResponse>(url);
 }

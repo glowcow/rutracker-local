@@ -44,8 +44,8 @@ export function AdminPanel({ open, onClose }: Props) {
 
   // ESC to close. The parse keeps running server-side, so closing is safe.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && open) onClose();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && open) onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -64,13 +64,13 @@ export function AdminPanel({ open, onClose }: Props) {
   useEffect(() => {
     if (!open) return;
     listDumps()
-      .then((d) => {
-        setDumps(d.items);
-        setSource((s) => s || d.items[0]?.name || "");
+      .then((dumps) => {
+        setDumps(dumps.items);
+        setSource((prev) => prev || dumps.items[0]?.name || "");
       })
       .catch(() => setDumps([]));
     getRecentRuns(3)
-      .then((r) => setRecent(r.items))
+      .then((runs) => setRecent(runs.items))
       .catch(() => setRecent([]));
   }, [open]);
 
@@ -78,7 +78,7 @@ export function AdminPanel({ open, onClose }: Props) {
   useEffect(() => {
     if (status === "succeeded" || status === "failed") {
       getRecentRuns(3)
-        .then((r) => setRecent(r.items))
+        .then((runs) => setRecent(runs.items))
         .catch(() => {});
     }
   }, [status]);
@@ -95,8 +95,8 @@ export function AdminPanel({ open, onClose }: Props) {
     try {
       await startParse({ source, batch_size: batchSize, sweep }, token);
       begin();
-    } catch (e) {
-      const code = e instanceof Error ? e.message : "";
+    } catch (err) {
+      const code = err instanceof Error ? err.message : "";
       setStartErr(
         code === "conflict"
           ? t.adminErrConflict
@@ -110,10 +110,10 @@ export function AdminPanel({ open, onClose }: Props) {
   };
 
   const saveToken = () => {
-    const v = tokenDraft.trim();
-    if (!v) return;
-    setToken(v);
-    setTokenState(v);
+    const token = tokenDraft.trim();
+    if (!token) return;
+    setToken(token);
+    setTokenState(token);
     setTokenDraft("");
   };
 
@@ -188,8 +188,8 @@ export function AdminPanel({ open, onClose }: Props) {
                   <input
                     type="password"
                     value={tokenDraft}
-                    onChange={(e) => setTokenDraft(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && saveToken()}
+                    onChange={(event) => setTokenDraft(event.target.value)}
+                    onKeyDown={(event) => event.key === "Enter" && saveToken()}
                     placeholder={t.adminTokenPlaceholder}
                     // Not a login form: new-password keeps Chrome from offering saved passwords
                     // and from autofilling the header search; data-*-ignore quiets 1Password.
@@ -289,8 +289,8 @@ export function AdminPanel({ open, onClose }: Props) {
                   </div>
                 ) : (
                   <div className="rounded-md border border-[var(--color-rule)] divide-y divide-[var(--color-rule)]">
-                    {recent.map((r) => (
-                      <RunRow key={r.id} run={r} />
+                    {recent.map((run) => (
+                      <RunRow key={run.id} run={run} />
                     ))}
                   </div>
                 )}
@@ -352,27 +352,27 @@ export function AdminPanel({ open, onClose }: Props) {
                       "font-mono text-[11.5px] leading-relaxed",
                     )}
                   >
-                    {logs.map((l) => (
-                      <div key={l.id} className="whitespace-pre-wrap break-words">
-                        {l.ts && (
+                    {logs.map((line) => (
+                      <div key={line.id} className="whitespace-pre-wrap break-words">
+                        {line.ts && (
                           <span className="text-[var(--color-ink-muted)]/70">
-                            {l.ts}
+                            {line.ts}
                             {"  "}
                           </span>
                         )}
                         <span
                           className={cn(
-                            l.level === "error" && "text-[var(--color-down)]",
-                            l.level === "warn" && "text-[var(--color-warn)]",
-                            l.level === "info" && "text-[var(--color-ink)]",
+                            line.level === "error" && "text-[var(--color-down)]",
+                            line.level === "warn" && "text-[var(--color-warn)]",
+                            line.level === "info" && "text-[var(--color-ink)]",
                           )}
                         >
-                          {l.msg}
+                          {line.msg}
                         </span>
-                        {l.detail && (
+                        {line.detail && (
                           <span className="text-[var(--color-ink-muted)]">
                             {"   "}
-                            {l.detail}
+                            {line.detail}
                           </span>
                         )}
                       </div>
@@ -418,15 +418,15 @@ function DumpSelect({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
-  const selected = dumps.find((d) => d.name === value);
+  const selected = dumps.find((dump) => dump.name === value);
 
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    const onDown = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -440,7 +440,7 @@ function DumpSelect({
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen((wasOpen) => !wasOpen)}
         disabled={disabled}
         className={cn(
           "w-full h-10 pl-3 pr-9 rounded-md text-[14px] text-left flex items-center",
@@ -478,14 +478,14 @@ function DumpSelect({
             "shadow-[var(--shadow-menu)]",
           )}
         >
-          {dumps.map((d) => {
-            const active = d.name === value;
+          {dumps.map((dump) => {
+            const active = dump.name === value;
             return (
               <button
-                key={d.name}
+                key={dump.name}
                 type="button"
                 onClick={() => {
-                  onChange(d.name);
+                  onChange(dump.name);
                   setOpen(false);
                 }}
                 className={cn(
@@ -495,10 +495,10 @@ function DumpSelect({
               >
                 <Check className={cn("size-3.5 shrink-0 text-[var(--color-accent)]", !active && "invisible")} />
                 <span className="truncate min-w-0">
-                  <span className={cn("font-medium", active && "text-[var(--color-accent)]")}>{d.name}</span>
+                  <span className={cn("font-medium", active && "text-[var(--color-accent)]")}>{dump.name}</span>
                   <span className="text-[var(--color-ink-muted)]">
                     {" — "}
-                    {formatBytes(d.size_bytes)} · {formatDate(d.mtime)}
+                    {formatBytes(dump.size_bytes)} · {formatDate(dump.mtime)}
                   </span>
                 </span>
               </button>
@@ -529,12 +529,12 @@ function Segmented({
         disabled && "opacity-50 pointer-events-none",
       )}
     >
-      {options.map((o) => {
-        const active = o === value;
+      {options.map((option) => {
+        const active = option === value;
         return (
           <button
-            key={o}
-            onClick={() => onChange(o)}
+            key={option}
+            onClick={() => onChange(option)}
             className={cn(
               "px-4 h-8 rounded-[5px] text-[12px] font-medium tabular-nums transition-colors",
               active
@@ -542,7 +542,7 @@ function Segmented({
                 : "text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]",
             )}
           >
-            {o}
+            {option}
           </button>
         );
       })}
@@ -639,11 +639,11 @@ function StatusPill({ status }: { status: ParseStatus }) {
       text: "text-[var(--color-down)]",
     },
   };
-  const s = map[status];
+  const style = map[status];
   return (
-    <span className={cn("inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em]", s.text)}>
-      <span className={cn("size-2 rounded-full", s.dot)} />
-      {s.label}
+    <span className={cn("inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em]", style.text)}>
+      <span className={cn("size-2 rounded-full", style.dot)} />
+      {style.label}
     </span>
   );
 }

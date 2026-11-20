@@ -56,13 +56,13 @@ function App() {
 
   // A filter change resets the page, inside the setter — an effect may not
   // set state. Stable callbacks: the memoised children depend on them.
-  const setQueryReset = useCallback((v: string) => {
-    setQuery(v);
+  const setQueryReset = useCallback((value: string) => {
+    setQuery(value);
     setPage(0);
-    if (v !== "") setFavOnly(false);
+    if (value !== "") setFavOnly(false);
   }, []);
-  const setSort = useCallback((s: Sort) => {
-    setSortState(s);
+  const setSort = useCallback((sort: Sort) => {
+    setSortState(sort);
     setPage(0);
   }, []);
   const setForumId = useCallback((id: number | undefined) => {
@@ -80,7 +80,7 @@ function App() {
       setPage(0);
       // ForumStrip reads this key on mount: write it before the remount below.
       localStorage.setItem(STRIP_OPEN_KEY, "false");
-      setForumsResetKey((k) => k + 1);
+      setForumsResetKey((key) => key + 1);
     }
     setFavOnly(next);
   };
@@ -125,7 +125,7 @@ function App() {
   });
   const selectedForum = useMemo(() => {
     if (forumId === undefined) return undefined;
-    return forumsData?.items?.find((f) => f.id === forumId);
+    return forumsData?.items?.find((forum) => forum.id === forumId);
   }, [forumId, forumsData]);
 
   const chips: Chip[] = useMemo(() => {
@@ -147,13 +147,13 @@ function App() {
     if (!isFavView) return favItems;
     const arr = favItems.slice();
     const mul = sort.dir === "asc" ? 1 : -1;
-    arr.sort((a, b) => {
+    arr.sort((left, right) => {
       if (sort.key === "date") {
-        return mul * (new Date(a.registered_at).getTime() - new Date(b.registered_at).getTime());
+        return mul * (new Date(left.registered_at).getTime() - new Date(right.registered_at).getTime());
       }
-      if (sort.key === "size") return mul * (a.size_bytes - b.size_bytes);
+      if (sort.key === "size") return mul * (left.size_bytes - right.size_bytes);
       // "relevance" maps to "newest starred first" in favorites view.
-      return mul * (new Date(a.added_at).getTime() - new Date(b.added_at).getTime());
+      return mul * (new Date(left.added_at).getTime() - new Date(right.added_at).getTime());
     });
     return arr;
   }, [isFavView, favItems, sort.key, sort.dir]);
@@ -235,7 +235,7 @@ function App() {
           setFavOnly(false);
           // ForumStrip reads this key on mount: write it before the remount below.
           localStorage.setItem(STRIP_OPEN_KEY, "false");
-          setForumsResetKey((k) => k + 1);
+          setForumsResetKey((key) => key + 1);
           window.scrollTo({ top: 0, behavior: "smooth" });
         }}
       />
@@ -258,9 +258,9 @@ function App() {
               aria-label={t.heroFindSomething}
               className="flex flex-wrap gap-x-[0.25em] gap-y-2 leading-none select-none text-[40px] sm:text-[64px] lg:text-[88px]"
             >
-              {HERO_EMOJI.map((e) => (
-                <span key={e} aria-hidden="true">
-                  {e}
+              {HERO_EMOJI.map((emoji) => (
+                <span key={emoji} aria-hidden="true">
+                  {emoji}
                 </span>
               ))}
             </h1>
@@ -415,12 +415,12 @@ function App() {
         <div ref={resultsPanelRef}>
           {showResults ? (
             <div className="swiss-results-enter">
-              {items.map((it, i) => (
+              {items.map((it, index) => (
                 <ResultCard
                   key={it.id}
                   torrent={it}
-                  zebra={i % 2 === 0}
-                  last={i === items.length - 1}
+                  zebra={index % 2 === 0}
+                  last={index === items.length - 1}
                   onSelect={openTorrent}
                   onForumClick={setForumId}
                   peersEnabled={peersEnabled}

@@ -44,12 +44,12 @@ async function migrateLegacyLocal(): Promise<boolean> {
     }
     await Promise.all(
       parsed
-        .filter((x: unknown): x is { id: number } => {
+        .filter((item: unknown): item is { id: number } => {
           return (
-            !!x && typeof (x as { id?: unknown }).id === "number"
+            !!item && typeof (item as { id?: unknown }).id === "number"
           );
         })
-        .map((x) => apiAdd(x.id).catch(() => undefined)),
+        .map((item) => apiAdd(item.id).catch(() => undefined)),
     );
     localStorage.removeItem(STORAGE_KEY);
     return true;
@@ -80,7 +80,7 @@ export function useIsFavorite(id: number): boolean {
     queryFn: apiList,
     staleTime: 30_000,
     select: useCallback(
-      (items: FavoriteItem[]) => items.some((x) => x.id === id),
+      (items: FavoriteItem[]) => items.some((item) => item.id === id),
       [id],
     ),
   });
@@ -93,13 +93,13 @@ export function useFavoriteToggle() {
   const qc = useQueryClient();
 
   const addMut = useMutation({
-    mutationFn: (t: Torrent) => apiAdd(t.id),
-    onMutate: async (t) => {
+    mutationFn: (torrent: Torrent) => apiAdd(torrent.id),
+    onMutate: async (torrent) => {
       await qc.cancelQueries({ queryKey: ["favorites"] });
       const rollback = optimisticUpdate(qc, (cur) => {
-        if (cur.some((x) => x.id === t.id)) return cur;
+        if (cur.some((item) => item.id === torrent.id)) return cur;
         const stamp = new Date().toISOString();
-        return [{ ...t, added_at: stamp }, ...cur];
+        return [{ ...torrent, added_at: stamp }, ...cur];
       });
       return { rollback };
     },
@@ -114,7 +114,7 @@ export function useFavoriteToggle() {
     onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: ["favorites"] });
       const rollback = optimisticUpdate(qc, (cur) =>
-        cur.filter((x) => x.id !== id),
+        cur.filter((item) => item.id !== id),
       );
       return { rollback };
     },
@@ -125,10 +125,10 @@ export function useFavoriteToggle() {
   });
 
   return useCallback(
-    (t: Torrent) => {
+    (torrent: Torrent) => {
       const cur = qc.getQueryData<FavoriteItem[]>(["favorites"]) ?? [];
-      if (cur.some((x) => x.id === t.id)) removeMut.mutate(t.id);
-      else addMut.mutate(t);
+      if (cur.some((item) => item.id === torrent.id)) removeMut.mutate(torrent.id);
+      else addMut.mutate(torrent);
     },
     [qc, addMut, removeMut],
   );
@@ -170,7 +170,7 @@ export function useFavorites() {
   });
 
   const isFavorite = useCallback(
-    (id: number) => items.some((x) => x.id === id),
+    (id: number) => items.some((item) => item.id === id),
     [items],
   );
 

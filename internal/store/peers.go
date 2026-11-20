@@ -37,27 +37,27 @@ func UpsertPeers(ctx context.Context, pool *pgxpool.Pool, torrentID int64, seede
 // GetPeers returns the cached snapshot for a torrent. The bool is false (with
 // nil error) when no row exists yet.
 func GetPeers(ctx context.Context, pool *pgxpool.Pool, torrentID int64) (Peers, bool, error) {
-	var p Peers
+	var result Peers
 	err := pool.QueryRow(ctx, `
 		SELECT seeders, leechers, checked_at
 		FROM torrent_peers WHERE torrent_id = $1
-	`, torrentID).Scan(&p.Seeders, &p.Leechers, &p.CheckedAt)
+	`, torrentID).Scan(&result.Seeders, &result.Leechers, &result.CheckedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Peers{}, false, nil
 	}
 	if err != nil {
 		return Peers{}, false, fmt.Errorf("get peers %d: %w", torrentID, err)
 	}
-	return p, true, nil
+	return result, true, nil
 }
 
 // CountCachedPeers counts the torrents with cached peers, fresh per request.
 func CountCachedPeers(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
-	var n int64
-	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM torrent_peers`).Scan(&n); err != nil {
+	var count int64
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM torrent_peers`).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count cached peers: %w", err)
 	}
-	return n, nil
+	return count, nil
 }
 
 // TorrentExists reports whether an id is in the catalogue — a cheap guard so

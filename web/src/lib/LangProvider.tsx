@@ -18,22 +18,22 @@ export function LangProvider({ children }: { children: ReactNode }) {
     document.documentElement.lang = lang;
   }, [lang]);
 
-  const setLang = useCallback((l: Lang) => {
-    setLangState(l);
+  const setLang = useCallback((next: Lang) => {
+    setLangState(next);
     try {
-      localStorage.setItem(STORAGE_KEY, l);
+      localStorage.setItem(STORAGE_KEY, next);
     } catch {
       // Storage unavailable: the choice holds for this page only.
     }
   }, []);
 
-  const t = dicts[lang];
+  const dict = dicts[lang];
 
   const locale = LOCALE[lang];
   const pluralRules = useMemo(() => new Intl.PluralRules(locale), [locale]);
 
   // The noun for an exact count; an abbreviated K/M figure takes pAbbr.
-  const p = useCallback(
+  const noun = useCallback(
     (key: keyof typeof plural["ru"], count: number) => {
       const form = pluralRules.select(count) as keyof typeof plural.ru[typeof key];
       const forms = plural[lang][key];
@@ -52,8 +52,8 @@ export function LangProvider({ children }: { children: ReactNode }) {
   );
 
   const value: Ctx = useMemo(
-    () => ({ lang, setLang, t, locale, p, pAbbr }),
-    [lang, setLang, t, locale, p, pAbbr],
+    () => ({ lang, setLang, t: dict, locale, p: noun, pAbbr }),
+    [lang, setLang, dict, locale, noun, pAbbr],
   );
 
   return <LangCtx.Provider value={value}>{children}</LangCtx.Provider>;

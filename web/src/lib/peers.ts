@@ -26,13 +26,13 @@ type PeersJSON = {
 };
 
 export async function getPeers(id: number): Promise<PeersState> {
-  const j = await getJSON<PeersJSON>(`/api/torrents/${id}/peers`);
+  const json = await getJSON<PeersJSON>(`/api/torrents/${id}/peers`);
   return {
-    configured: j.configured,
-    seeders: j.seeders ?? null,
-    leechers: j.leechers ?? null,
-    checkedAt: j.checked_at ?? null,
-    error: j.error ?? null,
+    configured: json.configured,
+    seeders: json.seeders ?? null,
+    leechers: json.leechers ?? null,
+    checkedAt: json.checked_at ?? null,
+    error: json.error ?? null,
   };
 }
 

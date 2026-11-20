@@ -35,13 +35,13 @@ func ResolveSource(pattern string) (string, error) {
 		newest  string
 		newestT time.Time
 	)
-	for _, m := range matches {
-		st, err := os.Stat(m)
+	for _, match := range matches {
+		st, err := os.Stat(match)
 		if err != nil {
 			continue
 		}
 		if st.ModTime().After(newestT) {
-			newest = m
+			newest = match
 			newestT = st.ModTime()
 		}
 	}
@@ -119,23 +119,23 @@ func Parse(r io.Reader, emit Emit) error {
 			continue
 		}
 
-		var x xmlTorrent
-		if err := dec.DecodeElement(&x, &se); err != nil {
+		var raw xmlTorrent
+		if err := dec.DecodeElement(&raw, &se); err != nil {
 			return fmt.Errorf("decode torrent (offset %d): %w", dec.InputOffset(), err)
 		}
 
 		// DecodeElement consumed the nested <torrent hash/> with the outer.
 
 		if err := emit(store.Torrent{
-			ID:           x.ID,
-			Title:        strings.TrimSpace(x.Title),
-			ForumID:      x.Forum.ID,
-			ForumName:    strings.TrimSpace(x.Forum.Name),
-			SizeBytes:    x.Size,
-			RegisteredAt: time.Unix(x.Unixts, 0).UTC(),
-			Hash:         x.Inner.Hash,
-			Content:      x.Content,
-			Files:        flattenFiles("", x.Dirs, x.Files, nil),
+			ID:           raw.ID,
+			Title:        strings.TrimSpace(raw.Title),
+			ForumID:      raw.Forum.ID,
+			ForumName:    strings.TrimSpace(raw.Forum.Name),
+			SizeBytes:    raw.Size,
+			RegisteredAt: time.Unix(raw.Unixts, 0).UTC(),
+			Hash:         raw.Inner.Hash,
+			Content:      raw.Content,
+			Files:        flattenFiles("", raw.Dirs, raw.Files, nil),
 		}); err != nil {
 			return err
 		}
@@ -145,19 +145,19 @@ func Parse(r io.Reader, emit Emit) error {
 // ParseFile parses a .xml, a .xml.xz (through native xz, pure Go was too slow)
 // or a .xml.gz, and closes them before it returns.
 func ParseFile(path string, emit Emit) error {
-	f, err := os.Open(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", path, err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { _ = file.Close() }()
 
-	r, err := decompressorFor(path, f)
+	reader, err := decompressorFor(path, file)
 	if err != nil {
 		return err
 	}
 	// Close reaps xz: a truncated dump shows only in its exit status.
-	err = Parse(r, emit)
-	if cerr := r.Close(); err == nil {
+	err = Parse(reader, emit)
+	if cerr := reader.Close(); err == nil {
 		err = cerr
 	}
 	return err
@@ -174,11 +174,11 @@ func decompressorFor(path string, src io.Reader) (io.ReadCloser, error) {
 	case strings.HasSuffix(path, ".xz"):
 		return newXZReader(src)
 	case strings.HasSuffix(path, ".gz"):
-		r, err := gzip.NewReader(src)
+		gzReader, err := gzip.NewReader(src)
 		if err != nil {
 			return nil, fmt.Errorf("gzip reader for %s: %w", path, err)
 		}
-		return r, nil
+		return gzReader, nil
 	default:
 		return io.NopCloser(src), nil
 	}

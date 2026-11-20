@@ -27,8 +27,8 @@ export function ConfirmDialog({ open, title, body, confirmLabel, onConfirm, onCl
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;

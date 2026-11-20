@@ -75,15 +75,15 @@ func FailParserRun(ctx context.Context, pool *pgxpool.Pool, id int64) error {
 // LatestParserRun returns the newest run, for the gauges; ErrNotFound before
 // the first parse.
 func LatestParserRun(ctx context.Context, pool *pgxpool.Pool) (ParserRun, error) {
-	var r ParserRun
+	var run ParserRun
 	err := pool.QueryRow(ctx, `
 		SELECT id, started_at, finished_at, source, rows_inserted, rows_swept, sweep, status
 		FROM parser_runs
 		ORDER BY started_at DESC
 		LIMIT 1
 	`).Scan(
-		&r.ID, &r.StartedAt, &r.FinishedAt, &r.Source,
-		&r.RowsInserted, &r.RowsSwept, &r.Sweep, &r.Status,
+		&run.ID, &run.StartedAt, &run.FinishedAt, &run.Source,
+		&run.RowsInserted, &run.RowsSwept, &run.Sweep, &run.Status,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -91,13 +91,13 @@ func LatestParserRun(ctx context.Context, pool *pgxpool.Pool) (ParserRun, error)
 		}
 		return ParserRun{}, fmt.Errorf("latest parser run: %w", err)
 	}
-	return r, nil
+	return run, nil
 }
 
 // LatestSucceededParserRun returns the newest succeeded run, the API's cache
 // version, which a running or failed parse does not move.
 func LatestSucceededParserRun(ctx context.Context, pool *pgxpool.Pool) (ParserRun, error) {
-	var r ParserRun
+	var run ParserRun
 	err := pool.QueryRow(ctx, `
 		SELECT id, started_at, finished_at, source, rows_inserted, rows_swept, sweep, status
 		FROM parser_runs
@@ -105,8 +105,8 @@ func LatestSucceededParserRun(ctx context.Context, pool *pgxpool.Pool) (ParserRu
 		ORDER BY started_at DESC
 		LIMIT 1
 	`, ParserRunSucceeded).Scan(
-		&r.ID, &r.StartedAt, &r.FinishedAt, &r.Source,
-		&r.RowsInserted, &r.RowsSwept, &r.Sweep, &r.Status,
+		&run.ID, &run.StartedAt, &run.FinishedAt, &run.Source,
+		&run.RowsInserted, &run.RowsSwept, &run.Sweep, &run.Status,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -114,7 +114,7 @@ func LatestSucceededParserRun(ctx context.Context, pool *pgxpool.Pool) (ParserRu
 		}
 		return ParserRun{}, fmt.Errorf("latest succeeded parser run: %w", err)
 	}
-	return r, nil
+	return run, nil
 }
 
 // ParserRunCounts returns lifetime totals by status. Drives the
@@ -128,7 +128,7 @@ type ParserRunCounts struct {
 // CountParserRuns returns aggregate counts by status. Cheap — the table
 // only grows by one row per parse, which is at most a few times a day.
 func CountParserRuns(ctx context.Context, pool *pgxpool.Pool) (ParserRunCounts, error) {
-	var c ParserRunCounts
+	var counts ParserRunCounts
 	err := pool.QueryRow(ctx, `
 		SELECT
 		  COUNT(*) FILTER (WHERE status = $1) AS succeeded,
@@ -136,11 +136,11 @@ func CountParserRuns(ctx context.Context, pool *pgxpool.Pool) (ParserRunCounts, 
 		  COUNT(*) FILTER (WHERE status = $3) AS running
 		FROM parser_runs
 	`, ParserRunSucceeded, ParserRunFailed, ParserRunRunning).
-		Scan(&c.Succeeded, &c.Failed, &c.Running)
+		Scan(&counts.Succeeded, &counts.Failed, &counts.Running)
 	if err != nil {
 		return ParserRunCounts{}, fmt.Errorf("count parser runs: %w", err)
 	}
-	return c, nil
+	return counts, nil
 }
 
 // RecentParserRuns returns the panel's recent runs, newest first; none is a
@@ -162,14 +162,14 @@ func RecentParserRuns(ctx context.Context, pool *pgxpool.Pool, limit int) ([]Par
 
 	var out []ParserRun
 	for rows.Next() {
-		var r ParserRun
+		var run ParserRun
 		if err := rows.Scan(
-			&r.ID, &r.StartedAt, &r.FinishedAt, &r.Source,
-			&r.RowsInserted, &r.RowsSwept, &r.Sweep, &r.Status,
+			&run.ID, &run.StartedAt, &run.FinishedAt, &run.Source,
+			&run.RowsInserted, &run.RowsSwept, &run.Sweep, &run.Status,
 		); err != nil {
 			return nil, fmt.Errorf("scan parser run: %w", err)
 		}
-		out = append(out, r)
+		out = append(out, run)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("recent parser runs rows: %w", err)

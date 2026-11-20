@@ -28,8 +28,8 @@ function write(key: string, value: string | null) {
 }
 
 function readTheme(): Theme {
-  const v = read(THEME_KEY);
-  return v === "light" || v === "dark" ? v : "system";
+  const stored = read(THEME_KEY);
+  return stored === "light" || stored === "dark" ? stored : "system";
 }
 
 const readPalette = (): Palette => (read(PALETTE_KEY) === "warm" ? "warm" : "classic");

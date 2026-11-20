@@ -42,12 +42,12 @@ type peersResponse struct {
 	Error      string  `json:"error,omitempty"`
 }
 
-func peersBody(p *store.Peers, errCode string) peersResponse {
+func peersBody(cached *store.Peers, errCode string) peersResponse {
 	resp := peersResponse{Configured: true, Error: errCode}
-	if p != nil {
-		s, l := p.Seeders, p.Leechers
-		ts := p.CheckedAt.UTC().Format(time.RFC3339)
-		resp.Seeders, resp.Leechers, resp.CheckedAt = &s, &l, &ts
+	if cached != nil {
+		seeders, leechers := cached.Seeders, cached.Leechers
+		ts := cached.CheckedAt.UTC().Format(time.RFC3339)
+		resp.Seeders, resp.Leechers, resp.CheckedAt = &seeders, &leechers, &ts
 	}
 	return resp
 }
@@ -95,7 +95,7 @@ func peersHandler(pool *pgxpool.Pool, pc *peers.Client, ttl time.Duration) http.
 			return
 		}
 
-		v, err, _ := sf.Do(strconv.FormatInt(id, 10), func() (any, error) {
+		result, err, _ := sf.Do(strconv.FormatInt(id, 10), func() (any, error) {
 			return pc.Fetch(ctx, id)
 		})
 		if err != nil {
@@ -114,7 +114,7 @@ func peersHandler(pool *pgxpool.Pool, pc *peers.Client, ttl time.Duration) http.
 			return
 		}
 
-		stat := v.(peers.Stat)
+		stat := result.(peers.Stat)
 		if err := store.UpsertPeers(ctx, pool, id, stat.Seeders, stat.Leechers); err != nil {
 			slog.Warn("peers upsert", "err", err, "id", id)
 		}

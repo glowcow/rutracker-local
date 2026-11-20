@@ -19,10 +19,10 @@ export function FavoriteStar({ torrent, size = "card" }: Props) {
   const { t } = useLang();
   const [pulse, setPulse] = useState(0);
 
-  const onClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const onClick = (event: React.MouseEvent) => {
+    event.stopPropagation();
     toggle(torrent);
-    setPulse((n) => n + 1);
+    setPulse((count) => count + 1);
   };
 
   const isDrawer = size === "drawer";

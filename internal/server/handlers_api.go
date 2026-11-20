@@ -39,7 +39,7 @@ func (c *versionedCache[T]) get(version int64) (T, bool) {
 	return zero, false
 }
 
-func (c *versionedCache[T]) set(version int64, v T) {
+func (c *versionedCache[T]) set(version int64, entry T) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// A request that read version N must not overwrite the N+1 a faster one
@@ -48,7 +48,7 @@ func (c *versionedCache[T]) set(version int64, v T) {
 		return
 	}
 	c.version = version
-	c.value = v
+	c.value = entry
 	c.populated = true
 }
 
@@ -99,23 +99,23 @@ func statsHandler(pool *pgxpool.Pool, peersEnabled bool) http.HandlerFunc {
 	cache := &versionedCache[store.Stats]{}
 	return func(w http.ResponseWriter, r *http.Request) {
 		key, dumpUpdatedAt := latestParserRun(r.Context(), pool)
-		s, ok := cache.get(key)
+		stats, ok := cache.get(key)
 		if !ok {
 			var err error
-			s, err = store.GetStats(r.Context(), pool)
+			stats, err = store.GetStats(r.Context(), pool)
 			if err != nil {
 				slog.Error("stats", "err", err)
 				writeJSON(w, http.StatusInternalServerError, errResp("stats failed"))
 				return
 			}
-			cache.set(key, s)
+			cache.set(key, stats)
 		}
 		peersCached, err := store.CountCachedPeers(r.Context(), pool)
 		if err != nil {
 			slog.Warn("peers cached count", "err", err)
 		}
 		writeJSON(w, http.StatusOK, statsResp{
-			Stats:         s,
+			Stats:         stats,
 			PeersCached:   peersCached,
 			PeersEnabled:  peersEnabled,
 			DumpUpdatedAt: dumpUpdatedAt,
@@ -195,14 +195,14 @@ func (c *searchTotalsCache) set(version int64, key searchKey, total int64) {
 func searchHandler(pool *pgxpool.Pool) http.HandlerFunc {
 	totals := &searchTotalsCache{}
 	return func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
+		query := r.URL.Query()
 		params := store.SearchParams{
-			Query:   q.Get("q"),
-			ForumID: parseInt32(q.Get("forum_id"), 0),
-			Sort:    q.Get("sort"),
-			Dir:     q.Get("dir"),
-			Offset:  parseInt(q.Get("offset"), 0),
-			Limit:   parseInt(q.Get("limit"), 50),
+			Query:   query.Get("q"),
+			ForumID: parseInt32(query.Get("forum_id"), 0),
+			Sort:    query.Get("sort"),
+			Dir:     query.Get("dir"),
+			Offset:  parseInt(query.Get("offset"), 0),
+			Limit:   parseInt(query.Get("limit"), 50),
 		}
 
 		items, err := store.Search(r.Context(), pool, params)
@@ -244,7 +244,7 @@ func torrentHandler(pool *pgxpool.Pool) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, errResp("invalid id"))
 			return
 		}
-		t, err := store.Get(r.Context(), pool, id)
+		torrent, err := store.Get(r.Context(), pool, id)
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				writeJSON(w, http.StatusNotFound, errResp("not found"))
@@ -255,8 +255,8 @@ func torrentHandler(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, torrentDetail{
-			Torrent:     t,
-			ContentHTML: bbcode.Render(t.Content),
+			Torrent:     torrent,
+			ContentHTML: bbcode.Render(torrent.Content),
 		})
 	}
 }
@@ -389,26 +389,26 @@ func parseTorrentID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	return id, true
 }
 
-func parseInt(s string, fallback int) int {
-	if s == "" {
+func parseInt(raw string, fallback int) int {
+	if raw == "" {
 		return fallback
 	}
-	v, err := strconv.Atoi(s)
-	if err != nil || v < 0 {
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed < 0 {
 		return fallback
 	}
-	return v
+	return parsed
 }
 
-func parseInt32(s string, fallback int32) int32 {
-	if s == "" {
+func parseInt32(raw string, fallback int32) int32 {
+	if raw == "" {
 		return fallback
 	}
-	v, err := strconv.ParseInt(s, 10, 32)
-	if err != nil || v < 0 {
+	parsed, err := strconv.ParseInt(raw, 10, 32)
+	if err != nil || parsed < 0 {
 		return fallback
 	}
-	return int32(v)
+	return int32(parsed)
 }
 
 func errResp(msg string) map[string]string { return map[string]string{"error": msg} }

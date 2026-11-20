@@ -67,30 +67,30 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 	// A bad peers setting warns and keeps the peers off: a typo there must
 	// not take search down (operator, 2026-08-01).
 	peersOK := true
-	boolean := func(k string, fallback bool) bool {
-		v := getenv(k)
-		if v == "" {
+	boolean := func(key string, fallback bool) bool {
+		value := getenv(key)
+		if value == "" {
 			return fallback
 		}
-		b, err := strconv.ParseBool(v)
+		parsed, err := strconv.ParseBool(value)
 		if err != nil {
-			warnings = append(warnings, fmt.Errorf("%s: want true or false, got %q; peers off", k, v))
+			warnings = append(warnings, fmt.Errorf("%s: want true or false, got %q; peers off", key, value))
 			peersOK = false
 		}
-		return b
+		return parsed
 	}
-	duration := func(k string, fallback time.Duration) time.Duration {
-		v := getenv(k)
-		if v == "" {
+	duration := func(key string, fallback time.Duration) time.Duration {
+		value := getenv(key)
+		if value == "" {
 			return fallback
 		}
-		d, err := time.ParseDuration(v)
-		if err != nil || d <= 0 {
-			warnings = append(warnings, fmt.Errorf("%s: want a positive duration like 24h, got %q; peers off", k, v))
+		parsed, err := time.ParseDuration(value)
+		if err != nil || parsed <= 0 {
+			warnings = append(warnings, fmt.Errorf("%s: want a positive duration like 24h, got %q; peers off", key, value))
 			peersOK = false
 			return fallback
 		}
-		return d
+		return parsed
 	}
 
 	dbURL := getenv("RT_DATABASE_URL")
