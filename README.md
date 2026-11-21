@@ -68,7 +68,7 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   api:
-    image: glowcow/rutracker:v1.9.9   # pick a published version — no :latest tag
+    image: glowcow/rutracker:v1.9.10   # pick a published version — no :latest tag
     depends_on: [postgres]
     environment:
       POSTGRES_HOST:     postgres
@@ -547,7 +547,7 @@ In containers, from the repo root — the UI first, then the binary with it embe
 ```sh
 docker run --rm -v "$PWD/web":/web -w /web node:26.10.0-alpine3.24 \
   sh -c 'npm ci && npx tsc -b && npx eslint . && npm run build'
-docker run --rm -v "$PWD":/src -w /src -e CGO_ENABLED=0 glowcow/go-tools:1.27.3-2 \
+docker run --rm -v "$PWD":/src -w /src -e CGO_ENABLED=0 glowcow/go-tools:1.27.4-1 \
   go build -trimpath -ldflags "-X main.version=v0.0.0-dev" -o bin/app ./cmd/rutracker
 docker build --build-arg IMAGE_PORT=8080 -t rutracker:dev .   # the snapshot's Dockerfile
 ```
@@ -560,8 +560,8 @@ docker run -d --rm --name rt_test_pg --network rt_test \
   -e POSTGRES_PASSWORD=test -e POSTGRES_DB=rt_test postgres:17.11-alpine
 docker run --rm --network rt_test -v "$PWD":/src -w /src \
   -e DATABASE_URL='postgres://postgres:test@rt_test_pg:5432/rt_test?sslmode=disable' \
-  glowcow/go-tools:1.27.3-2 go test -race ./...
-docker run --rm -v "$PWD":/src -w /src glowcow/go-tools:1.27.3-2 \
+  glowcow/go-tools:1.27.4-1 go test -race ./...
+docker run --rm -v "$PWD":/src -w /src glowcow/go-tools:1.27.4-1 \
   golangci-lint run ./cmd/... ./internal/... ./web
 ```
 
